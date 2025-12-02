@@ -402,6 +402,8 @@ class ExerciseWidget(QFrame):
         self.setCursor(Qt.PointingHandCursor)
 
         layout = QVBoxLayout()
+        # layout.setAlignment(Qt.AlignCenter)  # Центрируем содержимое внутри виджета
+        layout.setSpacing(8)
 
         title = QLabel(self.exercise["name"])
         title.setFont(QFont("Arial", 14, QFont.Bold))
@@ -409,7 +411,7 @@ class ExerciseWidget(QFrame):
         title.setAlignment(Qt.AlignCenter)
 
         self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignCenter)  # Это должно быть уже установлено
         self.image_label.setMinimumSize(250, 160)
         self.image_label.setMaximumSize(250, 160)
         self.image_label.setStyleSheet("""
@@ -446,12 +448,30 @@ class ExerciseWidget(QFrame):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
+                # Масштабируем с сохранением пропорций
                 scaled_pixmap = pixmap.scaled(240, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.image_label.setPixmap(scaled_pixmap)
+
+                # Создаем новый QPixmap с прозрачным фоном для центрирования
+                centered_pixmap = QPixmap(240, 150)
+                centered_pixmap.fill(Qt.transparent)
+
+                # Рассчитываем позицию для центрирования
+                x_offset = (240 - scaled_pixmap.width()) // 2
+                y_offset = (150 - scaled_pixmap.height()) // 2
+
+                painter = QPainter(centered_pixmap)
+                painter.drawPixmap(x_offset, y_offset, scaled_pixmap)
+                painter.end()
+
+                self.image_label.setPixmap(centered_pixmap)
             else:
+                # Если ошибка загрузки, показываем текст по центру
                 self.image_label.setText("Ошибка\nзагрузки\nизображения")
+                self.image_label.setAlignment(Qt.AlignCenter)
         else:
+            # Если файл не найден, показываем текст по центру
             self.image_label.setText("Изображение\nне найдено")
+            self.image_label.setAlignment(Qt.AlignCenter)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -476,46 +496,77 @@ class SmartTrainerApp(QWidget):
         self.exercises = [
             {
                 "name": "Верхняя тяга к груди",
-                "image": "chest_pull.jpg",
+                "image": "Chest cravings.jpg",
                 "intensity": 50,
                 "description": "Развивает мышцы спины и плечевого пояса"
             },
             {
                 "name": "Верхняя тяга за голову",
-                "image": "behind_head_pull.jpg",
+                "image": "Chest cravings.jpg",
                 "intensity": 45,
                 "description": "Укрепляет верхнюю часть спины"
             },
             {
-                "name": "Верхняя тяга на пресс",
-                "image": "abs_pull.jpg",
-                "intensity": 40,
-                "description": "Тренирует мышцы пресса и кора"
-            },
-            {
                 "name": "Бабочка",
-                "image": "butterfly.jpg",
+                "image": "Butterfly.jpg",
                 "intensity": 55,
-                "description": "Развивает грудные мышцы"
+                "description": "Развивает и растягивает грудные мышцы"
             },
             {
                 "name": "Жим от груди",
-                "image": "chest_press.jpg",
+                "image": "Chest press.jpg",
                 "intensity": 60,
                 "description": "Укрепляет грудные мышцы и трицепсы"
             },
             {
                 "name": "Разгибания ног",
-                "image": "leg_extension.jpg",
+                "image": "Leg extensions.jpg",
                 "intensity": 65,
                 "description": "Тренирует переднюю поверхность бедра"
             },
             {
                 "name": "Сгибания ног",
-                "image": "leg_curl.jpg",
+                "image": "bending of the legs.jpg",
                 "intensity": 50,
                 "description": "Развивает заднюю поверхность бедра"
+            },
+            {
+                "name": "Разгибания рук",
+                "image": "Triceps.jpg",
+                "intensity": 30,
+                "description": "Развивает трицепсы"
+            },
+            {
+                "name": "Сгибания рук",
+                "image": "Bicep Deadlift.jpg",
+                "intensity": 45,
+                "description": "Развивает бицепсы"
+            },
+            {
+                "name": "Тяга к пояснице",
+                "image": "Belt pull.jpg",
+                "intensity": 35,
+                "description": "Развивает широчайшие мышцы спины"
+            },
+            {
+                "name": "Отведите ноги назад",
+                "image": "Swing your legs back.jpg",
+                "intensity": 25,
+                "description": "Развивает ягодицы, бицепс бедра и спину"
+            },
+            {
+                "name": "Отведите ноги в сторону 1",
+                "image": "Swing your legs to the side 1.jpg",
+                "intensity": 25,
+                "description": "Развивает внешнюю часть бедра"
+            },
+            {
+                "name": "Отведите ноги в сторону 2",
+                "image": "Swing your legs to the side 2.jpg",
+                "intensity": 25,
+                "description": "Развивает внутреннюю часть бедра"
             }
+
         ]
 
         self.initUI()
