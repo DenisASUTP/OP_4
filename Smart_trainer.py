@@ -1056,16 +1056,25 @@ class SmartTrainerApp(QWidget):
             self.restart_application()
 
     def perform_update(self, dialog):
-        """Выполнение обновления в отдельном потоке"""
+        """Выполнение обновления в отдельном потоке БЕЗ Git"""
         try:
             dialog.update_message.emit("Проверка подключения к GitHub...")
             dialog.update_progress.emit(10)
 
-            # Проверяем доступность репозитория
+            # Базовый URL репозитория
             repo_url = "https://github.com/DenisASUTP/OP_4"
-            response = requests.get(f"{repo_url}/raw/main/app.py", timeout=10)
+
+            # Список файлов для обновления
+            files_to_update = [
+                'app.py',
+                'requirements.txt'
+            ]
+
+            # Проверяем доступность репозитория
+            test_url = f"{repo_url}/raw/main/app.py"
+            response = requests.get(test_url, timeout=10)
             if response.status_code != 200:
-                dialog.update_message.emit("Ошибка подключения к репозиторию")
+                dialog.update_message.emit("Ошибка подключения к GitHub")
                 dialog.update_progress.emit(0)
                 dialog.update_finished.emit(False)
                 return
@@ -1076,24 +1085,34 @@ class SmartTrainerApp(QWidget):
             # Получаем текущую директорию
             current_dir = os.path.dirname(os.path.abspath(__file__))
 
-            # Выполняем git pull
-            dialog.update_message.emit("Обновление файлов...")
-            dialog.update_progress.emit(60)
+            # Скачиваем и обновляем каждый файл
+            for i, filename in enumerate(files_to_update):
+                dialog.update_message.emit(f"Обновление {filename}...")
 
-            result = subprocess.run(
-                ["git", "pull", "origin", "main"],
-                cwd=current_dir,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+                url = f"{repo_url}/raw/main/{filename}"
+                response = requests.get(url, timeout=10)
 
-            if result.returncode != 0:
-                print(result.stderr)
-                dialog.update_message.emit(f"Ошибка обновления: {result.stderr}")
-                dialog.update_progress.emit(0)
-                dialog.update_finished.emit(False)
-                return
+                if response.status_code == 200:
+                    # Сохраняем новый файл
+                    file_path = os.path.join(current_dir, filename)
+
+                    # Делаем резервную копию старого файла
+                    if os.path.exists(file_path):
+                        backup_path = file_path + ".backup"
+                        import shutil
+                        shutil.copy2(file_path, backup_path)
+
+                    # Записываем новый файл
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(response.text)
+
+                    progress = 30 + ((i + 1) * 70 // len(files_to_update))
+                    dialog.update_progress.emit(progress)
+                else:
+                    dialog.update_message.emit(f"Ошибка скачивания {filename}")
+                    dialog.update_progress.emit(0)
+                    dialog.update_finished.emit(False)
+                    return
 
             dialog.update_message.emit("Обновление завершено!")
             dialog.update_progress.emit(100)
