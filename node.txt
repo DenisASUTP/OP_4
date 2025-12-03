@@ -4,6 +4,8 @@
 4 Создать моммит - git commit -m "Описание"
 5 Отправить на GitHub - git push origin main
 6 На другом ПК - git pull origin main
+7 Перейти в дир. - cd C:\Users\Ingener\PycharmProjects\TradingView\OP_4
+
 
 1. Начало работы (первый раз на ПК):
 # Клонировать проект с GitHub
