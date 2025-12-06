@@ -630,7 +630,7 @@ class SmartTrainerApp(QWidget):
         rfid_icon.setAlignment(Qt.AlignCenter)
 
         # Инструкция
-        instruction = QLabel("Поднесите RFID карту или введите номер вручную")
+        instruction = QLabel("Поднесите RFID карту или введите номер вручную 1")
         instruction.setFont(QFont("Arial", 16))
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setStyleSheet("color: white; margin: 20px;")
