@@ -2,9 +2,6 @@
 import sys
 import os
 import sqlite3
-import requests
-import subprocess
-import threading
 from datetime import datetime
 from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
                              QHBoxLayout, QLabel, QStackedWidget, QListWidget,
@@ -223,89 +220,6 @@ class RegistrationDialog(QDialog):
         }
 
 
-# Диалог обновления
-class UpdateDialog(QDialog):
-    update_progress = pyqtSignal(int)
-    update_message = pyqtSignal(str)
-    update_finished = pyqtSignal(bool)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Обновление приложения")
-        self.setFixedSize(400, 200)
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #2D2D2D;
-                color: white;
-            }
-        """)
-
-        layout = QVBoxLayout()
-
-        self.title_label = QLabel("Проверка обновлений...")
-        self.title_label.setFont(QFont("Arial", 14, QFont.Bold))
-        self.title_label.setStyleSheet("color: #FF6B00;")
-        self.title_label.setAlignment(Qt.AlignCenter)
-
-        self.message_label = QLabel("Подключение к репозиторию...")
-        self.message_label.setAlignment(Qt.AlignCenter)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #444;
-                border-radius: 5px;
-                text-align: center;
-                color: white;
-                height: 20px;
-            }
-            QProgressBar::chunk {
-                background-color: #FF6B00;
-            }
-        """)
-
-        self.cancel_button = QPushButton("Отмена")
-        self.cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #555;
-                color: white;
-                border: none;
-                padding: 8px;
-                border-radius: 5px;
-            }
-            QPushButton:pressed {
-                background-color: #777;
-            }
-        """)
-        self.cancel_button.clicked.connect(self.reject)
-
-        layout.addWidget(self.title_label)
-        layout.addWidget(self.message_label)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(self.cancel_button)
-
-        self.setLayout(layout)
-
-        self.update_progress.connect(self.progress_bar.setValue)
-        self.update_message.connect(self.message_label.setText)
-        self.update_finished.connect(self.on_update_finished)
-
-        self.is_cancelled = False
-
-    def on_update_finished(self, success):
-        if success:
-            self.title_label.setText("Обновление завершено!")
-            self.message_label.setText("Приложение будет перезапущено")
-            self.cancel_button.setText("Закрыть")
-        else:
-            self.title_label.setText("Ошибка обновления")
-            self.cancel_button.setText("Закрыть")
-
-    def reject(self):
-        self.is_cancelled = True
-        super().reject()
-
-
 # Экран приветствия
 class WelcomeScreen(QWidget):
     def __init__(self, user_data, parent=None):
@@ -402,7 +316,6 @@ class ExerciseWidget(QFrame):
         self.setCursor(Qt.PointingHandCursor)
 
         layout = QVBoxLayout()
-        # layout.setAlignment(Qt.AlignCenter)  # Центрируем содержимое внутри виджета
         layout.setSpacing(8)
 
         title = QLabel(self.exercise["name"])
@@ -411,7 +324,7 @@ class ExerciseWidget(QFrame):
         title.setAlignment(Qt.AlignCenter)
 
         self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)  # Это должно быть уже установлено
+        self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMinimumSize(250, 160)
         self.image_label.setMaximumSize(250, 160)
         self.image_label.setStyleSheet("""
@@ -448,14 +361,11 @@ class ExerciseWidget(QFrame):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                # Масштабируем с сохранением пропорций
                 scaled_pixmap = pixmap.scaled(240, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
 
-                # Создаем новый QPixmap с прозрачным фоном для центрирования
                 centered_pixmap = QPixmap(240, 150)
                 centered_pixmap.fill(Qt.transparent)
 
-                # Рассчитываем позицию для центрирования
                 x_offset = (240 - scaled_pixmap.width()) // 2
                 y_offset = (150 - scaled_pixmap.height()) // 2
 
@@ -465,11 +375,9 @@ class ExerciseWidget(QFrame):
 
                 self.image_label.setPixmap(centered_pixmap)
             else:
-                # Если ошибка загрузки, показываем текст по центру
                 self.image_label.setText("Ошибка\nзагрузки\nизображения")
                 self.image_label.setAlignment(Qt.AlignCenter)
         else:
-            # Если файл не найден, показываем текст по центру
             self.image_label.setText("Изображение\nне найдено")
             self.image_label.setAlignment(Qt.AlignCenter)
 
@@ -489,10 +397,9 @@ class SmartTrainerApp(QWidget):
         self.current_user = None
         self.current_exercise = None
         self.current_user_data = None
-        self.current_rfid_input = ""  # Текущий ввод RFID
-        self.rfid_input_complete = False  # Флаг завершения ввода
+        self.current_rfid_input = ""
+        self.rfid_input_complete = False
 
-        # Упражнения с картинками и описаниями
         self.exercises = [
             {
                 "name": "Верхняя тяга к груди",
@@ -566,12 +473,10 @@ class SmartTrainerApp(QWidget):
                 "intensity": 25,
                 "description": "Развивает внутреннюю часть бедра"
             }
-
         ]
 
         self.initUI()
 
-        # Таймер для обновления данных
         self.data_timer = QTimer()
         self.data_timer.timeout.connect(self.update_sensor_data)
         self.data_timer.start(100)
@@ -580,19 +485,11 @@ class SmartTrainerApp(QWidget):
         self.setWindowTitle("Smart Trainer - Orange Pi")
         self.setGeometry(0, 0, 600, 1024)
 
-        # Основной стек экранов
         self.stacked_widget = QStackedWidget()
 
-        # Экран ввода RFID
         self.auth_screen = self.create_auth_screen()
-
-        # Экран приветствия
         self.welcome_screen = None
-
-        # Экран выбора упражнений
         self.exercise_screen = self.create_exercise_screen()
-
-        # Экран выполнения упражнения
         self.workout_screen = self.create_workout_screen()
 
         self.stacked_widget.addWidget(self.auth_screen)
@@ -609,13 +506,11 @@ class SmartTrainerApp(QWidget):
         screen = QWidget()
         layout = QVBoxLayout()
 
-        # Заголовок
         title = QLabel("SMART TRAINER")
         title.setFont(QFont("Arial", 24, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #FF6B00; margin: 40px;")
 
-        # Иконка RFID
         rfid_icon = QLabel()
         rfid_pixmap = QPixmap(200, 200)
         rfid_pixmap.fill(Qt.transparent)
@@ -629,13 +524,11 @@ class SmartTrainerApp(QWidget):
         rfid_icon.setPixmap(rfid_pixmap)
         rfid_icon.setAlignment(Qt.AlignCenter)
 
-        # Инструкция
         instruction = QLabel("Поднесите RFID карту или введите номер вручную 1")
         instruction.setFont(QFont("Arial", 16))
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setStyleSheet("color: white; margin: 20px;")
 
-        # Поле ввода RFID (невидимое - для фокуса)
         self.rfid_hidden_input = QLineEdit()
         self.rfid_hidden_input.setStyleSheet("""
             QLineEdit {
@@ -650,42 +543,21 @@ class SmartTrainerApp(QWidget):
         self.rfid_hidden_input.textChanged.connect(self.on_rfid_input_changed)
         self.rfid_hidden_input.setFocus()
 
-        # Отображение ввода в углу
         self.input_display = QLabel("Ввод: ")
         self.input_display.setFont(QFont("Arial", 10))
         self.input_display.setStyleSheet("color: #888888;")
         self.input_display.setAlignment(Qt.AlignRight)
         self.input_display.setContentsMargins(0, 0, 20, 0)
 
-        # Статус
         self.auth_status = QLabel("Ожидание карты...")
         self.auth_status.setFont(QFont("Arial", 14))
         self.auth_status.setAlignment(Qt.AlignCenter)
         self.auth_status.setStyleSheet("color: #CCCCCC; margin: 20px;")
 
-        # Индикатор ввода
         self.input_indicator = QLabel("▢▢▢▢▢▢▢▢▢▢")
         self.input_indicator.setFont(QFont("Arial", 24, QFont.Bold))
         self.input_indicator.setAlignment(Qt.AlignCenter)
         self.input_indicator.setStyleSheet("color: #FF6B00; margin: 10px;")
-
-        # Кнопка проверки обновлений
-        btn_update = QPushButton("Проверить обновления")
-        btn_update.setFont(QFont("Arial", 12))
-        btn_update.setStyleSheet("""
-            QPushButton {
-                background-color: #1976D2;
-                color: white;
-                border: none;
-                padding: 10px;
-                border-radius: 5px;
-                margin: 10px;
-            }
-            QPushButton:pressed {
-                background-color: #1565C0;
-            }
-        """)
-        btn_update.clicked.connect(self.check_for_updates)
 
         layout.addWidget(title)
         layout.addStretch()
@@ -694,57 +566,47 @@ class SmartTrainerApp(QWidget):
         layout.addWidget(self.input_indicator)
         layout.addWidget(self.auth_status)
         layout.addStretch()
-        layout.addWidget(btn_update)
         layout.addWidget(self.input_display)
         layout.addWidget(self.rfid_hidden_input)
 
         screen.setLayout(layout)
         screen.setStyleSheet("background-color: #1E1E1E;")
 
-        # Устанавливаем фокус на поле ввода
         QTimer.singleShot(100, lambda: self.rfid_hidden_input.setFocus())
 
         return screen
 
     def on_rfid_input_changed(self, text):
-        # Обновляем отображение ввода
         self.current_rfid_input = text
         self.input_display.setText(f"Ввод: {text}")
 
-        # Обновляем индикатор
         filled = len(text)
         indicator = "█" * filled + "▢" * (10 - filled)
         self.input_indicator.setText(indicator)
 
-        # Если введено 10 цифр - обрабатываем
         if len(text) == 10 and text.isdigit():
             self.rfid_input_complete = True
             self.auth_status.setText("Обработка карты...")
             QTimer.singleShot(500, lambda: self.process_rfid(text))
 
     def keyPressEvent(self, event):
-        # Перехватываем нажатия клавиш для всего приложения
         key = event.key()
 
-        # Цифровые клавиши
         if Qt.Key_0 <= key <= Qt.Key_9:
             digit = str(key - Qt.Key_0)
             current_text = self.rfid_hidden_input.text()
             if len(current_text) < 10:
                 self.rfid_hidden_input.setText(current_text + digit)
 
-        # Удаление (Backspace)
         elif key == Qt.Key_Backspace:
             current_text = self.rfid_hidden_input.text()
             if current_text:
                 self.rfid_hidden_input.setText(current_text[:-1])
 
-        # Enter (если вдруг нужно подтвердить)
         elif key == Qt.Key_Return or key == Qt.Key_Enter:
             if len(self.current_rfid_input) == 10:
                 self.process_rfid(self.current_rfid_input)
 
-        # ESC - очистить ввод
         elif key == Qt.Key_Escape:
             self.rfid_hidden_input.clear()
             self.auth_status.setText("Ожидание карты...")
@@ -753,14 +615,12 @@ class SmartTrainerApp(QWidget):
             super().keyPressEvent(event)
 
     def process_rfid(self, rfid):
-        # Очищаем ввод после обработки
         self.rfid_hidden_input.clear()
         self.rfid_input_complete = False
 
         user = self.db.find_user_by_rfid(rfid)
 
         if user:
-            # Пользователь найден
             self.current_user = user
             self.current_user_data = {
                 'rf_id': user[1],
@@ -772,7 +632,6 @@ class SmartTrainerApp(QWidget):
             self.auth_status.setText("Пользователь найден!")
             QTimer.singleShot(1000, self.show_welcome_screen)
         else:
-            # Пользователь не найден - регистрация
             self.auth_status.setText("Пользователь не найден")
             QTimer.singleShot(1000, lambda: self.register_new_user(rfid))
 
@@ -798,21 +657,17 @@ class SmartTrainerApp(QWidget):
 
     def show_welcome_screen(self):
         if self.current_user_data:
-            # Удаляем старый экран приветствия если есть
             if self.welcome_screen:
                 self.welcome_screen.setParent(None)
 
-            # Создаем новый экран приветствия
             self.welcome_screen = WelcomeScreen(self.current_user_data, self)
 
-            # Добавляем в стек если еще не добавлен
             for i in range(self.stacked_widget.count()):
                 if self.stacked_widget.widget(i) == self.welcome_screen:
                     break
             else:
                 self.stacked_widget.insertWidget(1, self.welcome_screen)
 
-            # Показываем экран приветствия
             self.stacked_widget.setCurrentWidget(self.welcome_screen)
 
     def create_exercise_screen(self):
@@ -1009,18 +864,15 @@ class SmartTrainerApp(QWidget):
 
     def show_exercise_screen(self):
         if self.current_user_data:
-            # Обновляем информацию о пользователе
             self.user_info.setText(
                 f"Пользователь: {self.current_user_data['first_name']} {self.current_user_data['last_name']} | "
                 f"Рост: {self.current_user_data['height']}см | "
                 f"Уровень: {self.current_user_data['fitness_level']}"
             )
 
-            # Очищаем старые упражнения
             for i in reversed(range(self.exercises_layout.count())):
                 self.exercises_layout.itemAt(i).widget().setParent(None)
 
-            # Добавляем упражнения
             row = 0
             for exercise in self.exercises:
                 exercise_widget = ExerciseWidget(exercise, self)
@@ -1059,7 +911,7 @@ class SmartTrainerApp(QWidget):
         self.show_workout_screen()
 
     def update_sensor_data(self):
-        if self.stacked_widget.currentIndex() == 3:  # Индекс экрана тренировки
+        if self.stacked_widget.currentIndex() == 3:
             force = self.modbus.read_force_sensor()
             position = self.modbus.get_position()
 
@@ -1090,95 +942,6 @@ class SmartTrainerApp(QWidget):
                                     f"Длительность: {duration} сек")
 
         self.show_exercise_screen()
-
-    def check_for_updates(self):
-        """Проверка обновлений"""
-        dialog = UpdateDialog(self)
-        dialog.show()
-
-        # Запускаем проверку в отдельном потоке
-        thread = threading.Thread(target=self.perform_update, args=(dialog,))
-        thread.daemon = True
-        thread.start()
-
-        if dialog.exec_() == QDialog.Accepted and not dialog.is_cancelled:
-            # Перезапуск приложения после успешного обновления
-            QMessageBox.information(self, "Перезапуск", "Приложение будет перезапущено")
-            self.restart_application()
-
-    def perform_update(self, dialog):
-        """Выполнение обновления в отдельном потоке БЕЗ Git"""
-        try:
-            dialog.update_message.emit("Проверка подключения к GitHub...")
-            dialog.update_progress.emit(10)
-
-            # Базовый URL репозитория
-            repo_url = "https://github.com/DenisASUTP/OP_4"
-
-            # Список файлов для обновления
-            files_to_update = [
-                'app.py',
-                'requirements.txt'
-            ]
-
-            # Проверяем доступность репозитория
-            test_url = f"{repo_url}/raw/main/app.py"
-            response = requests.get(test_url, timeout=10)
-            if response.status_code != 200:
-                dialog.update_message.emit("Ошибка подключения к GitHub")
-                dialog.update_progress.emit(0)
-                dialog.update_finished.emit(False)
-                return
-
-            dialog.update_message.emit("Скачивание обновлений...")
-            dialog.update_progress.emit(30)
-
-            # Получаем текущую директорию
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-
-            # Скачиваем и обновляем каждый файл
-            for i, filename in enumerate(files_to_update):
-                dialog.update_message.emit(f"Обновление {filename}...")
-
-                url = f"{repo_url}/raw/main/{filename}"
-                response = requests.get(url, timeout=10)
-
-                if response.status_code == 200:
-                    # Сохраняем новый файл
-                    file_path = os.path.join(current_dir, filename)
-
-                    # Делаем резервную копию старого файла
-                    if os.path.exists(file_path):
-                        backup_path = file_path + ".backup"
-                        import shutil
-                        shutil.copy2(file_path, backup_path)
-
-                    # Записываем новый файл
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(response.text)
-
-                    progress = 30 + ((i + 1) * 70 // len(files_to_update))
-                    dialog.update_progress.emit(progress)
-                else:
-                    dialog.update_message.emit(f"Ошибка скачивания {filename}")
-                    dialog.update_progress.emit(0)
-                    dialog.update_finished.emit(False)
-                    return
-
-            dialog.update_message.emit("Обновление завершено!")
-            dialog.update_progress.emit(100)
-            dialog.update_finished.emit(True)
-
-        except Exception as e:
-            dialog.update_message.emit(f"Ошибка: {str(e)}")
-            dialog.update_progress.emit(0)
-            dialog.update_finished.emit(False)
-
-    def restart_application(self):
-        """Перезапуск приложения"""
-        QApplication.quit()
-        subprocess.Popen([sys.executable] + sys.argv)
-        sys.exit()
 
 
 def initialize_test_data():
