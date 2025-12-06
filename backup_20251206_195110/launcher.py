@@ -87,8 +87,8 @@ class UpdateThread(QThread):
         if not os.path.exists(backup_dir):
             os.makedirs(backup_dir)
 
-        # Файлы для обновления (теперь только app.py и requirements.txt)
-        files_to_update = ['app.py', 'requirements.txt']
+        # Файлы для обновления
+        files_to_update = ['app.py', 'requirements.txt', 'launcher.py']
 
         # Создаем бэкапы
         self.progress_updated.emit(10, "Создание резервных копий")
@@ -125,12 +125,8 @@ class UpdateThread(QThread):
 
         if success_count == len(files_to_update):
             # Обновляем версию
-            try:
-                with open("version.txt", 'w') as f:
-                    f.write(github_version)
-                self.log_message.emit(f"Версия обновлена до {github_version}")
-            except Exception as e:
-                self.log_message.emit(f"Ошибка обновления version.txt: {e}")
+            with open("version.txt", 'w') as f:
+                f.write(github_version)
 
             # Устанавливаем зависимости
             self.progress_updated.emit(80, "Установка зависимостей")
@@ -169,14 +165,13 @@ class UpdateThread(QThread):
         self.log_message.emit("Проверка и установка модулей...")
         self.progress_updated.emit(30, "Чтение requirements.txt")
 
-        requirements_path = self.get_requirements_path()
-        if not os.path.exists(requirements_path):
-            self.log_message.emit(f"Файл requirements.txt не найден по пути: {requirements_path}")
+        if not os.path.exists("requirements.txt"):
+            self.log_message.emit("Файл requirements.txt не найден")
             self.update_complete.emit(False, "Файл requirements.txt не найден")
             return
 
         try:
-            with open(requirements_path, 'r') as f:
+            with open("requirements.txt", 'r') as f:
                 requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
 
             if not requirements:
@@ -187,21 +182,27 @@ class UpdateThread(QThread):
             self.progress_updated.emit(50, f"Установка {len(requirements)} модулей")
             self.log_message.emit(f"Найдено {len(requirements)} модулей для установки")
 
-            # Устанавливаем все модули сразу
-            self.log_message.emit("Установка всех модулей...")
+            for i, req in enumerate(requirements):
+                if self.canceled:
+                    self.log_message.emit("Установка отменена")
+                    self.update_complete.emit(False, "Установка отменена")
+                    return
 
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path],
-                                      stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL)
+                progress = 50 + ((i + 1) * 40 // len(requirements))
+                self.progress_updated.emit(progress, f"Установка {req}")
+                self.log_message.emit(f"  Установка: {req}")
 
-                self.progress_updated.emit(100, "Установка завершена")
-                self.log_message.emit("Все модули успешно установлены")
-                self.update_complete.emit(True, "Модули успешно установлены")
+                try:
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", req],
+                                          stdout=subprocess.DEVNULL,
+                                          stderr=subprocess.DEVNULL)
+                    self.log_message.emit(f"  ✓ Установлен: {req}")
+                except subprocess.CalledProcessError:
+                    self.log_message.emit(f"  ✗ Ошибка установки: {req}")
 
-            except subprocess.CalledProcessError as e:
-                self.log_message.emit(f"Ошибка установки модулей: {e}")
-                self.update_complete.emit(False, f"Ошибка установки: {e}")
+            self.progress_updated.emit(100, "Установка завершена")
+            self.log_message.emit("Все модули успешно установлены")
+            self.update_complete.emit(True, "Модули успешно установлены")
 
         except Exception as e:
             self.log_message.emit(f"Ошибка: {str(e)}")
@@ -209,48 +210,24 @@ class UpdateThread(QThread):
 
     def install_requirements_silent(self):
         """Устанавливает зависимости без вывода"""
-        requirements_path = self.get_requirements_path()
-        if not os.path.exists(requirements_path):
-            return False
-
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
-            return True
+            if os.path.exists("requirements.txt"):
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL)
+                return True
         except:
             return False
-
-    def get_requirements_path(self):
-        """Получает путь к файлу requirements.txt"""
-        # Сначала ищем в текущей директории
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        requirements_path = os.path.join(current_dir, "requirements.txt")
-
-        if os.path.exists(requirements_path):
-            return requirements_path
-
-        # Если не найдено, пробуем найти в директории скрипта
-        script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        requirements_path = os.path.join(script_dir, "requirements.txt")
-
-        return requirements_path
+        return True
 
     def get_current_version(self):
         """Получает текущую версию приложения"""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        version_path = os.path.join(current_dir, "version.txt")
-
-        # Если файл не найден в текущей директории, пробуем директорию скрипта
-        if not os.path.exists(version_path):
-            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            version_path = os.path.join(script_dir, "version.txt")
-
+        version_file = "version.txt"
         current_version = "1.0.0"
 
-        if os.path.exists(version_path):
+        if os.path.exists(version_file):
             try:
-                with open(version_path, 'r') as f:
+                with open(version_file, 'r') as f:
                     current_version = f.read().strip()
             except:
                 pass
@@ -276,25 +253,11 @@ class UpdateThread(QThread):
             response = requests.get(url, timeout=30)
 
             if response.status_code == 200:
-                # Получаем абсолютный путь для сохранения
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                file_path = os.path.join(current_dir, filename)
+                os.makedirs(os.path.dirname(filename) or '.', exist_ok=True)
 
-                # Создаем директорию если нужно
-                os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
-
-                # Сохраняем файл с правильной кодировкой
-                with open(file_path, 'wb') as f:
+                with open(filename, 'wb') as f:
                     f.write(response.content)
-
-                # Проверяем, что файл был записан
-                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                    self.log_message.emit(f"Файл {filename} успешно сохранен ({os.path.getsize(file_path)} байт)")
-                    return True
-                else:
-                    self.log_message.emit(f"Ошибка: файл {filename} не был сохранен")
-                    return False
-
+                return True
         except Exception as e:
             self.log_message.emit(f"Ошибка скачивания {filename}: {str(e)}")
 
@@ -651,8 +614,6 @@ class InstallScreen(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.init_ui()
-        # Автоматически проверяем requirements при создании экрана
-        QTimer.singleShot(100, self.parent.check_requirements)
 
     def init_ui(self):
         layout = QVBoxLayout()
@@ -795,10 +756,9 @@ class InstallScreen(QWidget):
     def add_log(self, message):
         """Добавляет сообщение в лог"""
         self.log_text.append(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
-        # Автопрокрутка вниз
-        cursor = self.log_text.textCursor()
-        cursor.movePosition(cursor.End)
-        self.log_text.setTextCursor(cursor)
+        self.log_text.verticalScrollBar().setValue(
+            self.log_text.verticalScrollBar().maximum()
+        )
 
     def clear_log(self):
         """Очищает лог"""
@@ -813,17 +773,14 @@ class InstallScreen(QWidget):
             if modules:
                 self.req_modules_label.setText(f"Модулей для установки: {len(modules)}")
                 modules_text = ", ".join(modules[:5]) + ("..." if len(modules) > 5 else "")
-                self.add_log(f"Найдено {len(modules)} модулей для установки")
-                self.add_log(f"Модули: {modules_text}")
+                self.req_modules_label.setToolTip(f"Модули: {modules_text}")
             else:
                 self.req_modules_label.setText("Нет модулей для установки")
                 self.req_modules_label.setStyleSheet("color: #FF9800;")
-                self.add_log("Файл requirements.txt пуст")
         else:
             self.req_status_label.setText("Файл requirements.txt не найден")
             self.req_status_label.setStyleSheet("color: #F44336;")
             self.req_modules_label.setText("")
-            self.add_log("Файл requirements.txt не найден")
 
     def set_progress(self, value, text):
         """Устанавливает прогресс"""
@@ -889,12 +846,7 @@ class SmartTrainerLauncher(QWidget):
     def show_update_screen(self):
         """Показывает экран обновления"""
         self.update_screen.clear_log()
-
-        # Получаем текущие версии
-        current_version = self.get_current_version()
-        github_version = self.get_github_version()
-
-        self.update_screen.set_versions(current_version, github_version or "не доступна")
+        self.update_screen.set_versions("проверка...", "проверка...")
         self.update_screen.set_status("ожидание проверки")
         self.update_screen.set_progress(0, "Готов к работе")
         self.update_screen.set_buttons_state()
@@ -905,9 +857,8 @@ class SmartTrainerLauncher(QWidget):
         self.install_screen.clear_log()
         self.install_screen.set_progress(0, "Готов к работе")
         self.install_screen.set_buttons_state()
+        self.check_requirements()
         self.stacked_widget.setCurrentWidget(self.install_screen)
-        # Автоматически проверяем requirements при показе экрана
-        QTimer.singleShot(100, self.check_requirements)
 
     def check_current_version(self):
         """Проверяет текущую версию для отображения на welcome screen"""
@@ -916,40 +867,17 @@ class SmartTrainerLauncher(QWidget):
 
     def get_current_version(self):
         """Получает текущую версию"""
-        # Ищем файл version.txt в текущей директории
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        version_path = os.path.join(current_dir, "version.txt")
-
-        # Если файл не найден в текущей директории, пробуем директорию скрипта
-        if not os.path.exists(version_path):
-            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            version_path = os.path.join(script_dir, "version.txt")
-
+        version_file = "version.txt"
         current_version = "1.0.0"
 
-        if os.path.exists(version_path):
+        if os.path.exists(version_file):
             try:
-                with open(version_path, 'r', encoding='utf-8') as f:
+                with open(version_file, 'r') as f:
                     current_version = f.read().strip()
-            except Exception as e:
-                print(f"Ошибка чтения version.txt: {e}")
+            except:
+                pass
 
         return current_version
-
-    def get_requirements_path(self):
-        """Получает путь к файлу requirements.txt"""
-        # Сначала ищем в текущей директории (где находится launcher.py)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        requirements_path = os.path.join(current_dir, "requirements.txt")
-
-        if os.path.exists(requirements_path):
-            return requirements_path
-
-        # Если не найдено, пробуем найти в директории скрипта
-        script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        requirements_path = os.path.join(script_dir, "requirements.txt")
-
-        return requirements_path
 
     def start_check(self):
         """Начинает проверку обновлений"""
@@ -985,7 +913,6 @@ class SmartTrainerLauncher(QWidget):
         """Начинает установку модулей"""
         self.install_screen.clear_log()
         self.install_screen.set_buttons_state(installing=True)
-        self.install_screen.add_log("Начинаю установку модулей...")
 
         self.update_thread = UpdateThread('install')
         self.update_thread.progress_updated.connect(self.install_screen.set_progress)
@@ -995,57 +922,16 @@ class SmartTrainerLauncher(QWidget):
 
     def check_requirements(self):
         """Проверяет файл requirements.txt"""
-        self.install_screen.clear_log()
-
-        requirements_path = self.get_requirements_path()
-        self.install_screen.add_log(f"Поиск файла requirements.txt...")
-        self.install_screen.add_log(f"Путь поиска: {requirements_path}")
-
-        if os.path.exists(requirements_path):
-            self.install_screen.add_log(f"Файл найден: {requirements_path}")
-
-            try:
-                with open(requirements_path, 'r', encoding='utf-8') as f:
+        try:
+            if os.path.exists("requirements.txt"):
+                with open("requirements.txt", 'r') as f:
                     modules = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-
                 self.install_screen.set_req_info(True, modules)
-
-                # Проверяем, установлены ли модули
-                if modules:
-                    self.install_screen.add_log(f"Найдено {len(modules)} модулей")
-                    self.install_screen.add_log("Проверка установленных модулей...")
-
-                    installed_count = 0
-                    for module in modules:
-                        # Извлекаем имя модуля (без версии)
-                        module_name = module.split('==')[0].split('>=')[0].split('<=')[0].strip()
-                        try:
-                            subprocess.check_call([sys.executable, "-m", "pip", "show", module_name],
-                                                  stdout=subprocess.DEVNULL,
-                                                  stderr=subprocess.DEVNULL)
-                            installed_count += 1
-                            self.install_screen.add_log(f"  ✓ {module} - установлен")
-                        except subprocess.CalledProcessError:
-                            self.install_screen.add_log(f"  ✗ {module} - не установлен")
-
-                    if installed_count < len(modules):
-                        self.install_screen.add_log(f"\nТребуется установить {len(modules) - installed_count} модулей")
-                        self.install_screen.btn_install.setEnabled(True)
-                    else:
-                        self.install_screen.add_log("\n✓ Все модули уже установлены!")
-                        self.install_screen.btn_install.setEnabled(False)
-                else:
-                    self.install_screen.add_log("Файл requirements.txt пуст")
-                    self.install_screen.btn_install.setEnabled(False)
-
-            except Exception as e:
-                self.install_screen.add_log(f"Ошибка чтения requirements.txt: {e}")
+            else:
                 self.install_screen.set_req_info(False, [])
-        else:
-            self.install_screen.add_log("Файл requirements.txt не найден")
-            self.install_screen.add_log(f"Текущая директория: {os.getcwd()}")
-            self.install_screen.add_log(f"Содержимое директории: {os.listdir('.')}")
+        except Exception as e:
             self.install_screen.set_req_info(False, [])
+            self.install_screen.add_log(f"Ошибка чтения requirements.txt: {e}")
 
     @pyqtSlot(bool, str)
     def on_check_complete(self, success, message):
@@ -1074,19 +960,6 @@ class SmartTrainerLauncher(QWidget):
 
         if success:
             self.update_screen.set_status("Обновление успешно", "#4CAF50")
-
-            # Проверяем, действительно ли файлы обновились
-            self.update_screen.add_log("\nПроверка обновленных файлов...")
-
-            # Проверяем размеры файлов
-            for filename in ['app.py', 'requirements.txt']:
-                file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
-                if os.path.exists(file_path):
-                    size = os.path.getsize(file_path)
-                    self.update_screen.add_log(f"  {filename}: {size} байт")
-                else:
-                    self.update_screen.add_log(f"  {filename}: не найден")
-
             QMessageBox.information(self, "Обновление завершено",
                                     "Приложение успешно обновлено!\n"
                                     "Рекомендуется перезапустить лаунчер.")
@@ -1110,18 +983,10 @@ class SmartTrainerLauncher(QWidget):
 
         if success:
             self.install_screen.set_progress(100, "Установка завершена")
-            self.install_screen.add_log("✓ " + message)
             QMessageBox.information(self, "Установка завершена",
                                     "Модули успешно установлены!")
-
-            # После установки снова проверяем requirements
-            QTimer.singleShot(1000, self.check_requirements)
         else:
             self.install_screen.set_progress(0, "Ошибка установки")
-            self.install_screen.add_log("✗ " + message)
-            QMessageBox.warning(self, "Ошибка установки",
-                                "Возникли проблемы при установке модулей.\n"
-                                "Проверьте подключение к интернету и права доступа.")
 
     def cancel_operation(self):
         """Отменяет текущую операцию"""
@@ -1144,33 +1009,21 @@ class SmartTrainerLauncher(QWidget):
             response = requests.get(version_url, timeout=10)
             if response.status_code == 200:
                 return response.text.strip()
-        except Exception as e:
-            print(f"Ошибка получения версии с GitHub: {e}")
-        return None
+        except:
+            return None
 
     def launch_application(self):
         """Запускает основное приложение"""
-        # Ищем app.py в текущей директории
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        app_path = os.path.join(current_dir, "app.py")
-
-        if not os.path.exists(app_path):
-            # Пробуем в директории скрипта
-            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            app_path = os.path.join(script_dir, "app.py")
-
-        if not os.path.exists(app_path):
-            QMessageBox.critical(self, "Ошибка", f"Файл app.py не найден!\nИскали: {app_path}")
+        if not os.path.exists("app.py"):
+            QMessageBox.critical(self, "Ошибка", "Файл app.py не найден!")
             return
 
         try:
-            self.install_screen.add_log(f"Запуск приложения: {app_path}")
-
             # Закрываем лаунчер
             self.hide()
 
             # Запускаем приложение
-            process = subprocess.Popen([sys.executable, app_path])
+            subprocess.Popen([sys.executable, "app.py"])
 
             # Даем время приложению запуститься
             QTimer.singleShot(1000, QApplication.instance().quit)
