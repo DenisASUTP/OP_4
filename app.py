@@ -3,12 +3,12 @@ import sys
 import os
 import sqlite3
 from datetime import datetime
-from PyQt5.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
+from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
                              QHBoxLayout, QLabel, QStackedWidget, QListWidget,
                              QListWidgetItem, QProgressBar, QMessageBox, QScrollArea,
                              QGridLayout, QFrame, QDialog, QLineEdit, QFormLayout)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QIntValidator
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QFont, QPixmap, QPainter, QColor, QIntValidator
 
 
 # Заглушка для Modbus RTU
@@ -976,4 +976,4 @@ if __name__ == "__main__":
     window = SmartTrainerApp()
     window.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
