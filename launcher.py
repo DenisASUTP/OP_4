@@ -1,860 +1,56 @@
 #!/usr/bin/env python3
 """
-Smart Trainer Launcher with GUI
-Проверяет обновления и запускает основное приложение
+Smart Trainer Launcher - Стабильная версия с GUI
+Автоматическая проверка обновлений и запуск приложения
 """
 import os
 import sys
 import subprocess
 import requests
+import threading
+import time
 from datetime import datetime
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QProgressBar, QMessageBox, QFrame, QGridLayout,
-    QGroupBox, QTextEdit, QStackedWidget
+    QPushButton, QProgressBar, QMessageBox, QGroupBox, QTextEdit
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot, QPoint, QPointF
-from PyQt5.QtGui import QFont, QPalette, QColor, QIcon, QPixmap, QPainter, QPen, QBrush, QPolygonF
-
-
-class UpdateThread(QThread):
-    """Поток для проверки и выполнения обновлений"""
-    progress_updated = pyqtSignal(int, str)
-    update_complete = pyqtSignal(bool, str)
-    log_message = pyqtSignal(str)
-
-    def __init__(self, action):
-        super().__init__()
-        self.action = action  # 'check', 'update', 'install'
-        self.canceled = False
-
-    def run(self):
-        try:
-            if self.action == 'check':
-                self.check_version()
-            elif self.action == 'update':
-                self.perform_update()
-            elif self.action == 'install':
-                self.install_requirements()
-        except Exception as e:
-            self.log_message.emit(f"Ошибка: {str(e)}")
-            self.update_complete.emit(False, str(e))
-
-    def check_version(self):
-        """Проверяет версии приложения"""
-        self.log_message.emit("Проверка текущей версии...")
-        self.progress_updated.emit(20, "Проверка локальной версии")
-
-        current_version = self.get_current_version()
-        self.log_message.emit(f"Текущая версия: {current_version}")
-
-        self.progress_updated.emit(50, "Проверка версии на GitHub")
-        github_version = self.get_github_version()
-
-        if github_version:
-            self.log_message.emit(f"Версия на GitHub: {github_version}")
-
-            if github_version == current_version:
-                message = "У вас актуальная версия приложения"
-                self.log_message.emit(message)
-                self.update_complete.emit(True, message)
-            else:
-                message = f"Доступно обновление: {current_version} → {github_version}"
-                self.log_message.emit(message)
-                self.update_complete.emit(False, message)
-        else:
-            message = "Не удалось проверить версию на GitHub"
-            self.log_message.emit(message)
-            self.update_complete.emit(False, message)
-
-        self.progress_updated.emit(100, "Проверка завершена")
-
-    def perform_update(self):
-        """Выполняет обновление приложения"""
-        self.log_message.emit("Начало обновления...")
-
-        # Получаем версии
-        current_version = self.get_current_version()
-        github_version = self.get_github_version()
-
-        if not github_version:
-            self.update_complete.emit(False, "Не удалось получить версию с GitHub")
-            return
-
-        # Создаем папку для бэкапа
-        backup_dir = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        if not os.path.exists(backup_dir):
-            os.makedirs(backup_dir)
-
-        # Файлы для обновления (теперь только app.py и requirements.txt)
-        files_to_update = ['app.py', 'requirements.txt']
-
-        # Создаем бэкапы
-        self.progress_updated.emit(10, "Создание резервных копий")
-        self.log_message.emit("Создание резервных копий...")
-
-        backup_count = 0
-        for filename in files_to_update:
-            if os.path.exists(filename):
-                import shutil
-                shutil.copy2(filename, os.path.join(backup_dir, filename))
-                backup_count += 1
-                self.log_message.emit(f"  ✓ Создана резервная копия: {filename}")
-
-        self.log_message.emit(f"Создано {backup_count} резервных копий")
-
-        # Скачиваем обновления
-        self.progress_updated.emit(30, "Скачивание обновлений")
-        success_count = 0
-
-        for i, filename in enumerate(files_to_update):
-            if self.canceled:
-                self.log_message.emit("Обновление отменено")
-                self.update_complete.emit(False, "Обновление отменено")
-                return
-
-            progress = 30 + ((i + 1) * 40 // len(files_to_update))
-            self.progress_updated.emit(progress, f"Скачивание {filename}")
-
-            if self.download_file(filename):
-                self.log_message.emit(f"  ✓ {filename} обновлен")
-                success_count += 1
-            else:
-                self.log_message.emit(f"  ✗ Ошибка обновления {filename}")
-
-        if success_count == len(files_to_update):
-            # Обновляем версию
-            try:
-                with open("version.txt", 'w') as f:
-                    f.write(github_version)
-                self.log_message.emit(f"Версия обновлена до {github_version}")
-            except Exception as e:
-                self.log_message.emit(f"Ошибка обновления version.txt: {e}")
-
-            # Устанавливаем зависимости
-            self.progress_updated.emit(80, "Установка зависимостей")
-            self.log_message.emit("Проверка и установка зависимостей...")
-
-            if self.install_requirements_silent():
-                message = f"Приложение успешно обновлено до версии {github_version}"
-                self.log_message.emit(message)
-                self.log_message.emit(f"Резервные копии сохранены в: {backup_dir}")
-                self.progress_updated.emit(100, "Обновление завершено")
-                self.update_complete.emit(True, message)
-            else:
-                message = "Обновление выполнено, но возникли проблемы с зависимостями"
-                self.log_message.emit(message)
-                self.update_complete.emit(False, message)
-        else:
-            # Восстанавливаем из бэкапа
-            self.progress_updated.emit(90, "Восстановление из резервной копии")
-            self.log_message.emit("Ошибка при обновлении! Восстанавливаю из резервной копии...")
-
-            restore_count = 0
-            for filename in files_to_update:
-                backup_path = os.path.join(backup_dir, filename)
-                if os.path.exists(backup_path):
-                    import shutil
-                    shutil.copy2(backup_path, filename)
-                    restore_count += 1
-                    self.log_message.emit(f"  Восстановлен: {filename}")
-
-            message = f"Восстановлено {restore_count} файлов из резервной копии"
-            self.log_message.emit(message)
-            self.update_complete.emit(False, "Ошибка обновления. Восстановлено из резервной копии.")
-
-    def install_requirements(self):
-        """Устанавливает зависимости"""
-        self.log_message.emit("Проверка и установка модулей...")
-        self.progress_updated.emit(30, "Чтение requirements.txt")
-
-        requirements_path = self.get_requirements_path()
-        if not os.path.exists(requirements_path):
-            self.log_message.emit(f"Файл requirements.txt не найден по пути: {requirements_path}")
-            self.update_complete.emit(False, "Файл requirements.txt не найден")
-            return
-
-        try:
-            with open(requirements_path, 'r') as f:
-                requirements = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-
-            if not requirements:
-                self.log_message.emit("Нет модулей для установки")
-                self.update_complete.emit(True, "Нет модулей для установки")
-                return
-
-            self.progress_updated.emit(50, f"Установка {len(requirements)} модулей")
-            self.log_message.emit(f"Найдено {len(requirements)} модулей для установки")
-
-            # Устанавливаем все модули сразу
-            self.log_message.emit("Установка всех модулей...")
-
-            try:
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path],
-                                      stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL)
-
-                self.progress_updated.emit(100, "Установка завершена")
-                self.log_message.emit("Все модули успешно установлены")
-                self.update_complete.emit(True, "Модули успешно установлены")
-
-            except subprocess.CalledProcessError as e:
-                self.log_message.emit(f"Ошибка установки модулей: {e}")
-                self.update_complete.emit(False, f"Ошибка установки: {e}")
-
-        except Exception as e:
-            self.log_message.emit(f"Ошибка: {str(e)}")
-            self.update_complete.emit(False, f"Ошибка установки: {str(e)}")
-
-    def install_requirements_silent(self):
-        """Устанавливает зависимости без вывода"""
-        requirements_path = self.get_requirements_path()
-        if not os.path.exists(requirements_path):
-            return False
-
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
-            return True
-        except:
-            return False
-
-    def get_requirements_path(self):
-        """Получает путь к файлу requirements.txt"""
-        # Сначала ищем в текущей директории
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        requirements_path = os.path.join(current_dir, "requirements.txt")
-
-        if os.path.exists(requirements_path):
-            return requirements_path
-
-        # Если не найдено, пробуем найти в директории скрипта
-        script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        requirements_path = os.path.join(script_dir, "requirements.txt")
-
-        return requirements_path
-
-    def get_current_version(self):
-        """Получает текущую версию приложения"""
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        version_path = os.path.join(current_dir, "version.txt")
-
-        # Если файл не найден в текущей директории, пробуем директорию скрипта
-        if not os.path.exists(version_path):
-            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            version_path = os.path.join(script_dir, "version.txt")
-
-        current_version = "1.0.0"
-
-        if os.path.exists(version_path):
-            try:
-                with open(version_path, 'r') as f:
-                    current_version = f.read().strip()
-            except:
-                pass
-
-        return current_version
-
-    def get_github_version(self):
-        """Получает версию с GitHub"""
-        try:
-            version_url = "https://raw.githubusercontent.com/DenisASUTP/OP_4/main/version.txt"
-            response = requests.get(version_url, timeout=10)
-            if response.status_code == 200:
-                return response.text.strip()
-        except Exception as e:
-            self.log_message.emit(f"Ошибка получения версии с GitHub: {str(e)}")
-
-        return None
-
-    def download_file(self, filename):
-        """Скачивает файл с GitHub"""
-        try:
-            url = f"https://raw.githubusercontent.com/DenisASUTP/OP_4/main/{filename}"
-            response = requests.get(url, timeout=30)
-
-            if response.status_code == 200:
-                # Получаем абсолютный путь для сохранения
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                file_path = os.path.join(current_dir, filename)
-
-                # Создаем директорию если нужно
-                os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
-
-                # Сохраняем файл с правильной кодировкой
-                with open(file_path, 'wb') as f:
-                    f.write(response.content)
-
-                # Проверяем, что файл был записан
-                if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                    self.log_message.emit(f"Файл {filename} успешно сохранен ({os.path.getsize(file_path)} байт)")
-                    return True
-                else:
-                    self.log_message.emit(f"Ошибка: файл {filename} не был сохранен")
-                    return False
-
-        except Exception as e:
-            self.log_message.emit(f"Ошибка скачивания {filename}: {str(e)}")
-
-        return False
-
-
-class StyledButton(QPushButton):
-    """Стилизованная кнопка"""
-
-    def __init__(self, text, color="#FF6B00", parent=None):
-        super().__init__(text, parent)
-        self.normal_color = color
-        self.hover_color = self.adjust_color(color, 1.2)
-        self.pressed_color = self.adjust_color(color, 0.8)
-
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {self.normal_color};
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 8px;
-                font-weight: bold;
-                font-size: 14px;
-                min-width: 120px;
-            }}
-            QPushButton:hover {{
-                background-color: {self.hover_color};
-            }}
-            QPushButton:pressed {{
-                background-color: {self.pressed_color};
-            }}
-            QPushButton:disabled {{
-                background-color: #555;
-                color: #888;
-            }}
-        """)
-
-    def adjust_color(self, color, factor):
-        """Изменяет яркость цвета"""
-        qcolor = QColor(color)
-        h, s, l, a = qcolor.getHslF()
-        l = min(0.9, max(0.1, l * factor))
-        qcolor.setHslF(h, s, l, a)
-        return qcolor.name()
-
-
-class WelcomeScreen(QWidget):
-    """Экран приветствия"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-        layout.setAlignment(Qt.AlignCenter)
-
-        # Заголовок
-        title = QLabel("SMART TRAINER LAUNCHER")
-        title.setFont(QFont("Arial", 28, QFont.Bold))
-        title.setStyleSheet("color: #FF6B00; margin: 30px;")
-        title.setAlignment(Qt.AlignCenter)
-
-        # Подзаголовок
-        subtitle = QLabel("Управление и обновление приложения")
-        subtitle.setFont(QFont("Arial", 16))
-        subtitle.setStyleSheet("color: #CCCCCC; margin: 10px;")
-        subtitle.setAlignment(Qt.AlignCenter)
-
-        # Иконка
-        icon_label = QLabel()
-        icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setFixedSize(200, 200)
-        icon_label.setStyleSheet("""
-            background-color: #2D2D2D;
-            border-radius: 100px;
-            border: 4px solid #FF6B00;
-        """)
-
-        # Создаем простую иконку через QPixmap
-        self.create_icon(icon_label)
-
-        # Информация о версии
-        self.version_label = QLabel("Версия: проверка...")
-        self.version_label.setFont(QFont("Arial", 12))
-        self.version_label.setStyleSheet("color: #888888; margin: 20px;")
-        self.version_label.setAlignment(Qt.AlignCenter)
-
-        # Кнопки
-        buttons_layout = QGridLayout()
-        buttons_layout.setSpacing(20)
-
-        self.btn_check = StyledButton("Проверить\nобновления", "#1976D2")
-        self.btn_check.clicked.connect(self.parent.show_update_screen)
-
-        self.btn_launch = StyledButton("Запустить\nприложение", "#4CAF50")
-        self.btn_launch.clicked.connect(self.parent.launch_application)
-
-        self.btn_install = StyledButton("Установить\nмодули", "#9C27B0")
-        self.btn_install.clicked.connect(self.parent.show_install_screen)
-
-        self.btn_exit = StyledButton("Выход", "#555555")
-        self.btn_exit.clicked.connect(QApplication.instance().quit)
-
-        buttons_layout.addWidget(self.btn_check, 0, 0)
-        buttons_layout.addWidget(self.btn_launch, 0, 1)
-        buttons_layout.addWidget(self.btn_install, 1, 0)
-        buttons_layout.addWidget(self.btn_exit, 1, 1)
-
-        # Информация
-        info_label = QLabel(
-            "© 2024 Smart Trainer System\n"
-            "GitHub: DenisASUTP/OP_4"
-        )
-        info_label.setFont(QFont("Arial", 9))
-        info_label.setStyleSheet("color: #666666; margin-top: 30px;")
-        info_label.setAlignment(Qt.AlignCenter)
-
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addStretch(1)
-        layout.addWidget(icon_label)
-        layout.addStretch(1)
-        layout.addWidget(self.version_label)
-        layout.addLayout(buttons_layout)
-        layout.addStretch(2)
-        layout.addWidget(info_label)
-
-        self.setLayout(layout)
-
-    def create_icon(self, label):
-        """Создает иконку для лаунчера"""
-        pixmap = QPixmap(200, 200)
-        pixmap.fill(Qt.transparent)
-
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        # Оранжевый круг
-        painter.setBrush(QBrush(QColor(255, 107, 0)))
-        painter.setPen(Qt.NoPen)
-        painter.drawEllipse(20, 20, 160, 160)
-
-        # Белая стрелка - рисуем с помощью drawPolygon с QPointF
-        points = [
-            QPointF(100, 60),
-            QPointF(140, 100),
-            QPointF(100, 140),
-            QPointF(100, 120),
-            QPointF(60, 120),
-            QPointF(60, 80),
-            QPointF(100, 80)
-        ]
-
-        polygon = QPolygonF(points)
-        painter.setBrush(QBrush(Qt.white))
-        painter.setPen(QPen(Qt.white, 2))
-        painter.drawPolygon(polygon)
-
-        painter.end()
-        label.setPixmap(pixmap)
-
-    def update_version_info(self, version):
-        """Обновляет информацию о версии"""
-        self.version_label.setText(f"Версия: {version}")
-
-
-class UpdateScreen(QWidget):
-    """Экран обновления"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-        layout.setContentsMargins(30, 30, 30, 30)
-
-        # Заголовок
-        title = QLabel("Обновление приложения")
-        title.setFont(QFont("Arial", 22, QFont.Bold))
-        title.setStyleSheet("color: #FF6B00; margin-bottom: 20px;")
-        title.setAlignment(Qt.AlignCenter)
-
-        # Информация о версиях
-        versions_group = QGroupBox("Информация о версиях")
-        versions_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #CCCCCC;
-                border: 2px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-
-        versions_layout = QGridLayout()
-
-        self.current_label = QLabel("Текущая версия: проверка...")
-        self.current_label.setFont(QFont("Arial", 11))
-        self.current_label.setStyleSheet("color: #CCCCCC;")
-
-        self.github_label = QLabel("Версия на GitHub: проверка...")
-        self.github_label.setFont(QFont("Arial", 11))
-        self.github_label.setStyleSheet("color: #CCCCCC;")
-
-        self.status_label = QLabel("Статус: ожидание проверки")
-        self.status_label.setFont(QFont("Arial", 11, QFont.Bold))
-        self.status_label.setStyleSheet("color: #FF6B00;")
-
-        versions_layout.addWidget(QLabel("Локальная:"), 0, 0)
-        versions_layout.addWidget(self.current_label, 0, 1)
-        versions_layout.addWidget(QLabel("GitHub:"), 1, 0)
-        versions_layout.addWidget(self.github_label, 1, 1)
-        versions_layout.addWidget(QLabel("Статус:"), 2, 0)
-        versions_layout.addWidget(self.status_label, 2, 1)
-
-        versions_group.setLayout(versions_layout)
-
-        # Прогресс
-        self.progress_label = QLabel("Готов к работе")
-        self.progress_label.setFont(QFont("Arial", 11))
-        self.progress_label.setStyleSheet("color: #CCCCCC; margin-top: 20px;")
-        self.progress_label.setAlignment(Qt.AlignCenter)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #444;
-                border-radius: 5px;
-                text-align: center;
-                color: white;
-                height: 25px;
-                margin: 10px 0;
-            }
-            QProgressBar::chunk {
-                background-color: #FF6B00;
-                border-radius: 3px;
-            }
-        """)
-
-        # Лог
-        log_group = QGroupBox("Лог операций")
-        log_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #CCCCCC;
-                border: 2px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-
-        log_layout = QVBoxLayout()
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 9))
-        self.log_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #1E1E1E;
-                color: #CCCCCC;
-                border: 1px solid #555;
-                border-radius: 5px;
-                padding: 10px;
-            }
-        """)
-        log_layout.addWidget(self.log_text)
-        log_group.setLayout(log_layout)
-
-        # Кнопки
-        buttons_layout = QHBoxLayout()
-
-        self.btn_check = StyledButton("Проверить", "#1976D2")
-        self.btn_check.clicked.connect(self.parent.start_check)
-
-        self.btn_update = StyledButton("Обновить", "#4CAF50")
-        self.btn_update.clicked.connect(self.parent.start_update)
-        self.btn_update.setEnabled(False)
-
-        self.btn_back = StyledButton("Назад", "#555555")
-        self.btn_back.clicked.connect(self.parent.show_welcome_screen)
-
-        self.btn_cancel = StyledButton("Отмена", "#D32F2F")
-        self.btn_cancel.clicked.connect(self.parent.cancel_operation)
-        self.btn_cancel.setEnabled(False)
-
-        buttons_layout.addWidget(self.btn_check)
-        buttons_layout.addWidget(self.btn_update)
-        buttons_layout.addWidget(self.btn_back)
-        buttons_layout.addWidget(self.btn_cancel)
-
-        layout.addWidget(title)
-        layout.addWidget(versions_group)
-        layout.addWidget(self.progress_label)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(log_group)
-        layout.addLayout(buttons_layout)
-
-        self.setLayout(layout)
-
-    def add_log(self, message):
-        """Добавляет сообщение в лог"""
-        self.log_text.append(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
-        self.log_text.verticalScrollBar().setValue(
-            self.log_text.verticalScrollBar().maximum()
-        )
-
-    def clear_log(self):
-        """Очищает лог"""
-        self.log_text.clear()
-
-    def set_versions(self, current, github):
-        """Устанавливает информацию о версиях"""
-        self.current_label.setText(f"Текущая версия: {current}")
-        self.github_label.setText(f"Версия на GitHub: {github}")
-
-    def set_status(self, status, color="#FF6B00"):
-        """Устанавливает статус"""
-        self.status_label.setText(f"Статус: {status}")
-        self.status_label.setStyleSheet(f"color: {color};")
-
-    def set_progress(self, value, text):
-        """Устанавливает прогресс"""
-        self.progress_bar.setValue(value)
-        self.progress_label.setText(text)
-
-    def set_buttons_state(self, checking=False, updating=False):
-        """Устанавливает состояние кнопок"""
-        self.btn_check.setEnabled(not (checking or updating))
-        self.btn_update.setEnabled(not (checking or updating))
-        self.btn_back.setEnabled(not (checking or updating))
-        self.btn_cancel.setEnabled(checking or updating)
-
-
-class InstallScreen(QWidget):
-    """Экран установки модулей"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.init_ui()
-        # Автоматически проверяем requirements при создании экрана
-        QTimer.singleShot(100, self.parent.check_requirements)
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-        layout.setContentsMargins(30, 30, 30, 30)
-
-        # Заголовок
-        title = QLabel("Установка модулей")
-        title.setFont(QFont("Arial", 22, QFont.Bold))
-        title.setStyleSheet("color: #FF6B00; margin-bottom: 20px;")
-        title.setAlignment(Qt.AlignCenter)
-
-        # Описание
-        description = QLabel(
-            "Эта функция установит все необходимые Python модули,\n"
-            "указанные в файле requirements.txt"
-        )
-        description.setFont(QFont("Arial", 11))
-        description.setStyleSheet("color: #CCCCCC; margin-bottom: 20px;")
-        description.setAlignment(Qt.AlignCenter)
-
-        # Информация о requirements.txt
-        req_group = QGroupBox("Информация о requirements.txt")
-        req_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #CCCCCC;
-                border: 2px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-
-        req_layout = QVBoxLayout()
-
-        self.req_status_label = QLabel("Проверка файла...")
-        self.req_status_label.setFont(QFont("Arial", 11))
-        self.req_status_label.setStyleSheet("color: #CCCCCC;")
-
-        self.req_modules_label = QLabel("Модули: загрузка...")
-        self.req_modules_label.setFont(QFont("Arial", 11))
-        self.req_modules_label.setStyleSheet("color: #CCCCCC;")
-
-        req_layout.addWidget(self.req_status_label)
-        req_layout.addWidget(self.req_modules_label)
-        req_group.setLayout(req_layout)
-
-        # Прогресс
-        self.progress_label = QLabel("Готов к установке")
-        self.progress_label.setFont(QFont("Arial", 11))
-        self.progress_label.setStyleSheet("color: #CCCCCC; margin-top: 20px;")
-        self.progress_label.setAlignment(Qt.AlignCenter)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 2px solid #444;
-                border-radius: 5px;
-                text-align: center;
-                color: white;
-                height: 25px;
-                margin: 10px 0;
-            }
-            QProgressBar::chunk {
-                background-color: #9C27B0;
-                border-radius: 3px;
-            }
-        """)
-
-        # Лог
-        log_group = QGroupBox("Лог установки")
-        log_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #CCCCCC;
-                border: 2px solid #444;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-
-        log_layout = QVBoxLayout()
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 9))
-        self.log_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #1E1E1E;
-                color: #CCCCCC;
-                border: 1px solid #555;
-                border-radius: 5px;
-                padding: 10px;
-            }
-        """)
-        log_layout.addWidget(self.log_text)
-        log_group.setLayout(log_layout)
-
-        # Кнопки
-        buttons_layout = QHBoxLayout()
-
-        self.btn_check_req = StyledButton("Проверить", "#1976D2")
-        self.btn_check_req.clicked.connect(self.parent.check_requirements)
-
-        self.btn_install = StyledButton("Установить", "#9C27B0")
-        self.btn_install.clicked.connect(self.parent.start_install)
-
-        self.btn_back = StyledButton("Назад", "#555555")
-        self.btn_back.clicked.connect(self.parent.show_welcome_screen)
-
-        self.btn_cancel = StyledButton("Отмена", "#D32F2F")
-        self.btn_cancel.clicked.connect(self.parent.cancel_operation)
-        self.btn_cancel.setEnabled(False)
-
-        buttons_layout.addWidget(self.btn_check_req)
-        buttons_layout.addWidget(self.btn_install)
-        buttons_layout.addWidget(self.btn_back)
-        buttons_layout.addWidget(self.btn_cancel)
-
-        layout.addWidget(title)
-        layout.addWidget(description)
-        layout.addWidget(req_group)
-        layout.addWidget(self.progress_label)
-        layout.addWidget(self.progress_bar)
-        layout.addWidget(log_group)
-        layout.addLayout(buttons_layout)
-
-        self.setLayout(layout)
-
-    def add_log(self, message):
-        """Добавляет сообщение в лог"""
-        self.log_text.append(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
-        # Автопрокрутка вниз
-        cursor = self.log_text.textCursor()
-        cursor.movePosition(cursor.End)
-        self.log_text.setTextCursor(cursor)
-
-    def clear_log(self):
-        """Очищает лог"""
-        self.log_text.clear()
-
-    def set_req_info(self, exists, modules):
-        """Устанавливает информацию о requirements.txt"""
-        if exists:
-            self.req_status_label.setText("Файл requirements.txt найден")
-            self.req_status_label.setStyleSheet("color: #4CAF50;")
-
-            if modules:
-                self.req_modules_label.setText(f"Модулей для установки: {len(modules)}")
-                modules_text = ", ".join(modules[:5]) + ("..." if len(modules) > 5 else "")
-                self.add_log(f"Найдено {len(modules)} модулей для установки")
-                self.add_log(f"Модули: {modules_text}")
-            else:
-                self.req_modules_label.setText("Нет модулей для установки")
-                self.req_modules_label.setStyleSheet("color: #FF9800;")
-                self.add_log("Файл requirements.txt пуст")
-        else:
-            self.req_status_label.setText("Файл requirements.txt не найден")
-            self.req_status_label.setStyleSheet("color: #F44336;")
-            self.req_modules_label.setText("")
-            self.add_log("Файл requirements.txt не найден")
-
-    def set_progress(self, value, text):
-        """Устанавливает прогресс"""
-        self.progress_bar.setValue(value)
-        self.progress_label.setText(text)
-
-    def set_buttons_state(self, installing=False):
-        """Устанавливает состояние кнопок"""
-        self.btn_check_req.setEnabled(not installing)
-        self.btn_install.setEnabled(not installing)
-        self.btn_back.setEnabled(not installing)
-        self.btn_cancel.setEnabled(installing)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot, QPoint, QPointF
+from PyQt5.QtGui import QFont, QPalette, QColor, QPixmap, QPainter, QPen, QBrush, QPolygonF
 
 
 class SmartTrainerLauncher(QWidget):
     """Основной класс лаунчера"""
+    log_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(int, str)
+    status_signal = pyqtSignal(str)
+    version_signal = pyqtSignal(str)
+    complete_signal = pyqtSignal(bool, str)
 
     def __init__(self):
         super().__init__()
-        self.update_thread = None
+        self.current_version = "1.0.0"
+        self.github_version = None
+        self.auto_launch = True
+        self.is_updating = False
         self.init_ui()
-        self.check_current_version()
 
-        # Таймер для периодической проверки версии
-        self.version_timer = QTimer()
-        self.version_timer.timeout.connect(self.check_current_version)
-        self.version_timer.start(30000)  # Каждые 30 секунд
+        # Подключаем сигналы
+        self.log_signal.connect(self.add_log)
+        self.progress_signal.connect(self.update_progress)
+        self.status_signal.connect(self.update_status)
+        self.version_signal.connect(self.update_version_display)
+        self.complete_signal.connect(self.on_operation_complete)
+
+        # Загружаем текущую версию
+        self.load_current_version()
+
+        # Запускаем таймер автостарта
+        self.start_countdown()
 
     def init_ui(self):
         self.setWindowTitle("Smart Trainer Launcher")
-        self.setFixedSize(800, 700)
+        self.setFixedSize(600, 500)
 
         # Устанавливаем темную тему
         self.setStyleSheet("""
@@ -864,278 +60,306 @@ class SmartTrainerLauncher(QWidget):
             }
         """)
 
-        # Основной стек экранов
-        self.stacked_widget = QStackedWidget()
-
-        # Создаем экраны
-        self.welcome_screen = WelcomeScreen(self)
-        self.update_screen = UpdateScreen(self)
-        self.install_screen = InstallScreen(self)
-
-        self.stacked_widget.addWidget(self.welcome_screen)
-        self.stacked_widget.addWidget(self.update_screen)
-        self.stacked_widget.addWidget(self.install_screen)
-
         layout = QVBoxLayout()
-        layout.addWidget(self.stacked_widget)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Заголовок
+        title = QLabel("SMART TRAINER")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setStyleSheet("color: #FF6B00;")
+        title.setAlignment(Qt.AlignCenter)
+
+        # Подзаголовок
+        subtitle = QLabel("Автоматический лаунчер")
+        subtitle.setFont(QFont("Arial", 14))
+        subtitle.setStyleSheet("color: #CCCCCC;")
+        subtitle.setAlignment(Qt.AlignCenter)
+
+        # Иконка
+        self.icon_label = QLabel()
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        self.icon_label.setFixedSize(150, 150)
+        self.create_icon()
+
+        # Информация о версии
+        self.version_label = QLabel("Версия: загрузка...")
+        self.version_label.setFont(QFont("Arial", 12))
+        self.version_label.setStyleSheet("color: #888888;")
+        self.version_label.setAlignment(Qt.AlignCenter)
+
+        # Таймер
+        self.timer_label = QLabel("Автозапуск через: 3")
+        self.timer_label.setFont(QFont("Arial", 16, QFont.Bold))
+        self.timer_label.setStyleSheet("color: #FF6B00;")
+        self.timer_label.setAlignment(Qt.AlignCenter)
+
+        # Статус
+        self.status_label = QLabel("Готов к работе")
+        self.status_label.setFont(QFont("Arial", 12))
+        self.status_label.setStyleSheet("color: #CCCCCC;")
+        self.status_label.setAlignment(Qt.AlignCenter)
+
+        # Прогресс
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #444;
+                border-radius: 5px;
+                text-align: center;
+                color: white;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background-color: #FF6B00;
+                border-radius: 3px;
+            }
+        """)
+
+        # Лог
+        log_group = QGroupBox("Процесс")
+        log_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                color: #CCCCCC;
+                border: 2px solid #444;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+
+        log_layout = QVBoxLayout()
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setFont(QFont("Consolas", 9))
+        self.log_text.setMaximumHeight(100)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1E1E1E;
+                color: #CCCCCC;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 5px;
+            }
+        """)
+        log_layout.addWidget(self.log_text)
+        log_group.setLayout(log_layout)
+
+        # Кнопки
+        buttons_layout = QHBoxLayout()
+
+        self.btn_check = QPushButton("Проверить сейчас")
+        self.btn_check.setStyleSheet("""
+            QPushButton {
+                background-color: #1976D2;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1565C0;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+            QPushButton:disabled {
+                background-color: #555;
+                color: #888;
+            }
+        """)
+        self.btn_check.clicked.connect(self.on_check_now)
+
+        self.btn_cancel = QPushButton("Отмена")
+        self.btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #555;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #666;
+            }
+            QPushButton:pressed {
+                background-color: #444;
+            }
+            QPushButton:disabled {
+                background-color: #333;
+                color: #666;
+            }
+        """)
+        self.btn_cancel.clicked.connect(self.on_cancel)
+        self.btn_cancel.setEnabled(False)
+
+        buttons_layout.addWidget(self.btn_check)
+        buttons_layout.addWidget(self.btn_cancel)
+
+        # Информация
+        info_label = QLabel("© 2024 Smart Trainer System")
+        info_label.setFont(QFont("Arial", 9))
+        info_label.setStyleSheet("color: #666666;")
+        info_label.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addStretch(1)
+        layout.addWidget(self.icon_label, 0, Qt.AlignCenter)
+        layout.addStretch(1)
+        layout.addWidget(self.version_label)
+        layout.addWidget(self.timer_label)
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(log_group)
+        layout.addLayout(buttons_layout)
+        layout.addWidget(info_label)
+
         self.setLayout(layout)
 
-        self.show_welcome_screen()
+    def create_icon(self):
+        """Создает иконку"""
+        pixmap = QPixmap(150, 150)
+        pixmap.fill(Qt.transparent)
 
-    def show_welcome_screen(self):
-        """Показывает экран приветствия"""
-        self.stacked_widget.setCurrentWidget(self.welcome_screen)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
 
-    def show_update_screen(self):
-        """Показывает экран обновления"""
-        self.update_screen.clear_log()
+        # Оранжевый круг
+        painter.setBrush(QBrush(QColor(255, 107, 0)))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(15, 15, 120, 120)
 
-        # Получаем текущие версии
-        current_version = self.get_current_version()
-        github_version = self.get_github_version()
+        # Белая стрелка
+        points = [
+            QPointF(75, 45),
+            QPointF(105, 75),
+            QPointF(75, 105),
+            QPointF(75, 90),
+            QPointF(45, 90),
+            QPointF(45, 60),
+            QPointF(75, 60)
+        ]
 
-        self.update_screen.set_versions(current_version, github_version or "не доступна")
-        self.update_screen.set_status("ожидание проверки")
-        self.update_screen.set_progress(0, "Готов к работе")
-        self.update_screen.set_buttons_state()
-        self.stacked_widget.setCurrentWidget(self.update_screen)
+        polygon = QPolygonF(points)
+        painter.setBrush(QBrush(Qt.white))
+        painter.setPen(QPen(Qt.white, 2))
+        painter.drawPolygon(polygon)
 
-    def show_install_screen(self):
-        """Показывает экран установки"""
-        self.install_screen.clear_log()
-        self.install_screen.set_progress(0, "Готов к работе")
-        self.install_screen.set_buttons_state()
-        self.stacked_widget.setCurrentWidget(self.install_screen)
-        # Автоматически проверяем requirements при показе экрана
-        QTimer.singleShot(100, self.check_requirements)
+        painter.end()
+        self.icon_label.setPixmap(pixmap)
 
-    def check_current_version(self):
-        """Проверяет текущую версию для отображения на welcome screen"""
-        version = self.get_current_version()
-        self.welcome_screen.update_version_info(version)
+    def load_current_version(self):
+        """Загружает текущую версию"""
+        version_file = "version.txt"
 
-    def get_current_version(self):
-        """Получает текущую версию"""
-        # Ищем файл version.txt в текущей директории
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        version_path = os.path.join(current_dir, "version.txt")
-
-        # Если файл не найден в текущей директории, пробуем директорию скрипта
-        if not os.path.exists(version_path):
-            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            version_path = os.path.join(script_dir, "version.txt")
-
-        current_version = "1.0.0"
-
-        if os.path.exists(version_path):
+        if os.path.exists(version_file):
             try:
-                with open(version_path, 'r', encoding='utf-8') as f:
-                    current_version = f.read().strip()
-            except Exception as e:
-                print(f"Ошибка чтения version.txt: {e}")
+                # Пробуем несколько кодировок
+                encodings = ['utf-8', 'utf-16', 'cp1251', 'cp1252', 'latin-1']
 
-        return current_version
+                for encoding in encodings:
+                    try:
+                        with open(version_file, 'r', encoding=encoding) as f:
+                            content = f.read().strip()
+                            if content:
+                                self.current_version = content
+                                self.version_signal.emit(f"Версия: {self.current_version}")
+                                break
+                    except:
+                        continue
+            except:
+                pass
 
-    def get_requirements_path(self):
-        """Получает путь к файлу requirements.txt"""
-        # Сначала ищем в текущей директории (где находится launcher.py)
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        requirements_path = os.path.join(current_dir, "requirements.txt")
+        self.version_signal.emit(f"Версия: {self.current_version}")
 
-        if os.path.exists(requirements_path):
-            return requirements_path
+    def start_countdown(self):
+        """Запускает обратный отсчет"""
+        self.countdown = 3
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_countdown)
+        self.timer.start(1000)  # Каждую секунду
 
-        # Если не найдено, пробуем найти в директории скрипта
-        script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-        requirements_path = os.path.join(script_dir, "requirements.txt")
+    def update_countdown(self):
+        """Обновляет обратный отсчет"""
+        if self.countdown > 0:
+            self.timer_label.setText(f"Автозапуск через: {self.countdown}")
+            self.countdown -= 1
+        else:
+            self.timer.stop()
+            if self.auto_launch and not self.is_updating:
+                QTimer.singleShot(1000, self.launch_application)
+                # self.start_automatic_check()
 
-        return requirements_path
+    def on_check_now(self):
+        """Обработчик кнопки 'Проверить сейчас'"""
+        self.auto_launch = False
+        self.timer.stop()
+        self.timer_label.setText("Ручная проверка")
+        self.start_automatic_check()
 
-    def start_check(self):
-        """Начинает проверку обновлений"""
-        self.update_screen.clear_log()
-        self.update_screen.set_buttons_state(checking=True)
+    def on_cancel(self):
+        """Обработчик кнопки 'Отмена'"""
+        self.is_updating = False
+        self.btn_check.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
+        self.status_signal.emit("Операция отменена")
+        self.add_log("Операция отменена пользователем")
+        self.launch_application()
 
-        self.update_thread = UpdateThread('check')
-        self.update_thread.progress_updated.connect(self.update_screen.set_progress)
-        self.update_thread.log_message.connect(self.update_screen.add_log)
-        self.update_thread.update_complete.connect(self.on_check_complete)
-        self.update_thread.start()
+    def start_automatic_check(self):
+        """Начинает автоматическую проверку"""
+        self.is_updating = True
+        self.btn_check.setEnabled(False)
+        self.btn_cancel.setEnabled(True)
 
-    def start_update(self):
-        """Начинает обновление"""
-        reply = QMessageBox.question(
-            self, "Подтверждение обновления",
-            "Вы уверены, что хотите обновить приложение?\n"
-            "Будут созданы резервные копии файлов.",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        # Запускаем в отдельном потоке
+        thread = threading.Thread(target=self.check_and_update)
+        thread.daemon = True
+        thread.start()
 
-        if reply == QMessageBox.Yes:
-            self.update_screen.clear_log()
-            self.update_screen.set_buttons_state(updating=True)
+    def check_and_update(self):
+        """Проверяет и обновляет приложение"""
+        try:
+            self.status_signal.emit("Проверка обновлений...")
+            self.progress_signal.emit(10, "Проверка GitHub")
+            self.add_log("Проверка обновлений...")
 
-            self.update_thread = UpdateThread('update')
-            self.update_thread.progress_updated.connect(self.update_screen.set_progress)
-            self.update_thread.log_message.connect(self.update_screen.add_log)
-            self.update_thread.update_complete.connect(self.on_update_complete)
-            self.update_thread.start()
+            # Проверяем версию на GitHub
+            github_version = self.get_github_version()
 
-    def start_install(self):
-        """Начинает установку модулей"""
-        self.install_screen.clear_log()
-        self.install_screen.set_buttons_state(installing=True)
-        self.install_screen.add_log("Начинаю установку модулей...")
+            if github_version:
+                self.add_log(f"Локальная версия: {self.current_version}")
+                self.add_log(f"Версия на GitHub: {github_version}")
 
-        self.update_thread = UpdateThread('install')
-        self.update_thread.progress_updated.connect(self.install_screen.set_progress)
-        self.update_thread.log_message.connect(self.install_screen.add_log)
-        self.update_thread.update_complete.connect(self.on_install_complete)
-        self.update_thread.start()
+                if github_version == self.current_version:
+                    self.add_log("У вас актуальная версия")
+                    self.complete_signal.emit(True, "Версия актуальна")
+                    return
 
-    def check_requirements(self):
-        """Проверяет файл requirements.txt"""
-        self.install_screen.clear_log()
+                self.add_log(f"Доступно обновление: {self.current_version} → {github_version}")
+                self.status_signal.emit("Скачивание обновлений...")
+                self.progress_signal.emit(30, "Скачивание файлов")
 
-        requirements_path = self.get_requirements_path()
-        self.install_screen.add_log(f"Поиск файла requirements.txt...")
-        self.install_screen.add_log(f"Путь поиска: {requirements_path}")
-
-        if os.path.exists(requirements_path):
-            self.install_screen.add_log(f"Файл найден: {requirements_path}")
-
-            try:
-                with open(requirements_path, 'r', encoding='utf-8') as f:
-                    modules = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-
-                self.install_screen.set_req_info(True, modules)
-
-                # Проверяем, установлены ли модули
-                if modules:
-                    self.install_screen.add_log(f"Найдено {len(modules)} модулей")
-                    self.install_screen.add_log("Проверка установленных модулей...")
-
-                    installed_count = 0
-                    for module in modules:
-                        # Извлекаем имя модуля (без версии)
-                        module_name = module.split('==')[0].split('>=')[0].split('<=')[0].strip()
-                        try:
-                            subprocess.check_call([sys.executable, "-m", "pip", "show", module_name],
-                                                  stdout=subprocess.DEVNULL,
-                                                  stderr=subprocess.DEVNULL)
-                            installed_count += 1
-                            self.install_screen.add_log(f"  ✓ {module} - установлен")
-                        except subprocess.CalledProcessError:
-                            self.install_screen.add_log(f"  ✗ {module} - не установлен")
-
-                    if installed_count < len(modules):
-                        self.install_screen.add_log(f"\nТребуется установить {len(modules) - installed_count} модулей")
-                        self.install_screen.btn_install.setEnabled(True)
-                    else:
-                        self.install_screen.add_log("\n✓ Все модули уже установлены!")
-                        self.install_screen.btn_install.setEnabled(False)
+                # Обновляем приложение
+                if self.update_application(github_version):
+                    self.complete_signal.emit(True, "Обновление завершено")
                 else:
-                    self.install_screen.add_log("Файл requirements.txt пуст")
-                    self.install_screen.btn_install.setEnabled(False)
+                    self.complete_signal.emit(False, "Ошибка обновления")
+            else:
+                self.add_log("Не удалось проверить обновления")
+                self.complete_signal.emit(True, "Проверка завершена")
 
-            except Exception as e:
-                self.install_screen.add_log(f"Ошибка чтения requirements.txt: {e}")
-                self.install_screen.set_req_info(False, [])
-        else:
-            self.install_screen.add_log("Файл requirements.txt не найден")
-            self.install_screen.add_log(f"Текущая директория: {os.getcwd()}")
-            self.install_screen.add_log(f"Содержимое директории: {os.listdir('.')}")
-            self.install_screen.set_req_info(False, [])
-
-    @pyqtSlot(bool, str)
-    def on_check_complete(self, success, message):
-        """Обрабатывает завершение проверки"""
-        self.update_screen.set_buttons_state()
-
-        if success:
-            self.update_screen.set_status("Актуальная версия", "#4CAF50")
-        else:
-            self.update_screen.set_status("Доступно обновление", "#FF9800")
-            if "Доступно обновление" in message:
-                self.update_screen.btn_update.setEnabled(True)
-
-        # Обновляем информацию о версиях
-        current_version = self.get_current_version()
-        github_version = self.get_github_version()
-
-        self.update_screen.set_versions(current_version, github_version or "не доступна")
-
-        self.update_screen.add_log(f"✓ {message}")
-
-    @pyqtSlot(bool, str)
-    def on_update_complete(self, success, message):
-        """Обрабатывает завершение обновления"""
-        self.update_screen.set_buttons_state()
-
-        if success:
-            self.update_screen.set_status("Обновление успешно", "#4CAF50")
-
-            # Проверяем, действительно ли файлы обновились
-            self.update_screen.add_log("\nПроверка обновленных файлов...")
-
-            # Проверяем размеры файлов
-            for filename in ['app.py', 'requirements.txt']:
-                file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
-                if os.path.exists(file_path):
-                    size = os.path.getsize(file_path)
-                    self.update_screen.add_log(f"  {filename}: {size} байт")
-                else:
-                    self.update_screen.add_log(f"  {filename}: не найден")
-
-            QMessageBox.information(self, "Обновление завершено",
-                                    "Приложение успешно обновлено!\n"
-                                    "Рекомендуется перезапустить лаунчер.")
-        else:
-            self.update_screen.set_status("Ошибка обновления", "#F44336")
-
-        # Обновляем информацию о версиях
-        current_version = self.get_current_version()
-        github_version = self.get_github_version()
-
-        self.update_screen.set_versions(current_version, github_version or "не доступна")
-        self.update_screen.btn_update.setEnabled(False)
-
-        # Обновляем версию на welcome screen
-        self.check_current_version()
-
-    @pyqtSlot(bool, str)
-    def on_install_complete(self, success, message):
-        """Обрабатывает завершение установки"""
-        self.install_screen.set_buttons_state()
-
-        if success:
-            self.install_screen.set_progress(100, "Установка завершена")
-            self.install_screen.add_log("✓ " + message)
-            QMessageBox.information(self, "Установка завершена",
-                                    "Модули успешно установлены!")
-
-            # После установки снова проверяем requirements
-            QTimer.singleShot(1000, self.check_requirements)
-        else:
-            self.install_screen.set_progress(0, "Ошибка установки")
-            self.install_screen.add_log("✗ " + message)
-            QMessageBox.warning(self, "Ошибка установки",
-                                "Возникли проблемы при установке модулей.\n"
-                                "Проверьте подключение к интернету и права доступа.")
-
-    def cancel_operation(self):
-        """Отменяет текущую операцию"""
-        if self.update_thread and self.update_thread.isRunning():
-            self.update_thread.canceled = True
-            self.update_thread.quit()
-            self.update_thread.wait()
-
-            if self.stacked_widget.currentWidget() == self.update_screen:
-                self.update_screen.set_buttons_state()
-                self.update_screen.add_log("Операция отменена пользователем")
-            elif self.stacked_widget.currentWidget() == self.install_screen:
-                self.install_screen.set_buttons_state()
-                self.install_screen.add_log("Операция отменена пользователем")
+        except Exception as e:
+            self.add_log(f"Ошибка: {str(e)}")
+            self.complete_signal.emit(False, f"Ошибка: {str(e)}")
 
     def get_github_version(self):
         """Получает версию с GitHub"""
@@ -1145,62 +369,189 @@ class SmartTrainerLauncher(QWidget):
             if response.status_code == 200:
                 return response.text.strip()
         except Exception as e:
-            print(f"Ошибка получения версии с GitHub: {e}")
+            self.add_log(f"Ошибка подключения: {e}")
         return None
+
+    def update_application(self, github_version):
+        """Обновляет приложение"""
+        try:
+            # Файлы для обновления
+            files_to_update = ['app.py', 'requirements.txt']
+
+            # Скачиваем файлы
+            for filename in files_to_update:
+                self.add_log(f"Скачиваю {filename}...")
+
+                if not self.download_file(filename):
+                    self.add_log(f"Ошибка скачивания {filename}")
+                    return False
+
+            # Обновляем версию
+            try:
+                with open("version.txt", 'w', encoding='utf-8') as f:
+                    f.write(github_version)
+                self.current_version = github_version
+                self.version_signal.emit(f"Версия: {self.current_version}")
+            except:
+                pass
+
+            # Устанавливаем зависимости
+            self.status_signal.emit("Установка модулей...")
+            self.progress_signal.emit(80, "Установка зависимостей")
+
+            if os.path.exists("requirements.txt"):
+                self.add_log("Установка зависимостей...")
+                if self.install_requirements():
+                    self.add_log("Зависимости установлены")
+                else:
+                    self.add_log("Ошибка установки зависимостей")
+
+            self.progress_signal.emit(100, "Готово")
+            return True
+
+        except Exception as e:
+            self.add_log(f"Ошибка обновления: {e}")
+            return False
+
+    def download_file(self, filename):
+        """Скачивает файл с GitHub"""
+        try:
+            url = f"https://raw.githubusercontent.com/DenisASUTP/OP_4/main/{filename}"
+            response = requests.get(url, timeout=30)
+
+            if response.status_code == 200:
+                with open(filename, 'wb') as f:
+                    f.write(response.content)
+                return True
+        except:
+            pass
+        return False
+
+    def install_requirements(self):
+        """Устанавливает зависимости"""
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+            return True
+        except:
+            return False
+
+    @pyqtSlot(bool, str)
+    def on_operation_complete(self, success, message):
+        """Обработчик завершения операции"""
+        self.is_updating = False
+        self.btn_check.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
+
+        if success:
+            self.status_signal.emit("Готово")
+            self.add_log(f"✓ {message}")
+        else:
+            self.status_signal.emit("Ошибка")
+            self.add_log(f"✗ {message}")
+
+        # Запускаем приложение через секунду
+        QTimer.singleShot(1000, self.launch_application)
+
+    @pyqtSlot(str)
+    def add_log(self, message):
+        """Добавляет сообщение в лог"""
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        self.log_text.append(f"[{timestamp}] {message}")
+        # Автопрокрутка
+        cursor = self.log_text.textCursor()
+        cursor.movePosition(cursor.End)
+        self.log_text.setTextCursor(cursor)
+
+    @pyqtSlot(int, str)
+    def update_progress(self, value, text):
+        """Обновляет прогресс"""
+        self.progress_bar.setValue(value)
+        self.status_label.setText(text)
+
+    @pyqtSlot(str)
+    def update_status(self, text):
+        """Обновляет статус"""
+        self.status_label.setText(text)
+
+    @pyqtSlot(str)
+    def update_version_display(self, text):
+        """Обновляет отображение версии"""
+        self.version_label.setText(text)
 
     def launch_application(self):
         """Запускает основное приложение"""
-        # Ищем app.py в текущей директории
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        app_path = os.path.join(current_dir, "app.py")
-
-        if not os.path.exists(app_path):
-            # Пробуем в директории скрипта
-            script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-            app_path = os.path.join(script_dir, "app.py")
-
-        if not os.path.exists(app_path):
-            QMessageBox.critical(self, "Ошибка", f"Файл app.py не найден!\nИскали: {app_path}")
+        if not os.path.exists("app.py"):
+            self.add_log("❌ Ошибка: Файл app.py не найден!")
+            QMessageBox.critical(self, "Ошибка", "Файл app.py не найден!")
             return
 
-        try:
-            self.install_screen.add_log(f"Запуск приложения: {app_path}")
+        self.add_log("🚀 Запуск приложения...")
 
+        try:
             # Закрываем лаунчер
             self.hide()
 
             # Запускаем приложение
-            process = subprocess.Popen([sys.executable, app_path])
+            subprocess.Popen([sys.executable, "app.py"])
 
-            # Даем время приложению запуститься
+            # Закрываем лаунчер через секунду
             QTimer.singleShot(1000, QApplication.instance().quit)
 
         except Exception as e:
+            self.add_log(f"❌ Ошибка запуска: {e}")
             QMessageBox.critical(self, "Ошибка запуска", f"Не удалось запустить приложение:\n{str(e)}")
-            self.show()
+
+
+def check_requirements():
+    """Проверяет наличие необходимых модулей"""
+    try:
+        import PyQt5
+        import requests
+        return True
+    except ImportError as e:
+        print(f"❌ Отсутствует модуль: {e}")
+        print("📦 Пробую установить необходимые модули...")
+
+        try:
+            # Пробуем установить requests
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+            print("✅ Модуль requests установлен")
+
+            # Перезапускаем лаунчер
+            print("🔄 Перезапуск лаунчера...")
+            subprocess.Popen([sys.executable, __file__])
+            return False
+        except:
+            print("❌ Не удалось установить модули")
+            print("   Установите вручную: pip install PyQt5 requests")
+            input("Нажмите Enter для выхода...")
+            return False
 
 
 def main():
     """Основная функция"""
+    # Проверяем наличие модулей
+    if not check_requirements():
+        return
+
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 
     # Устанавливаем темную палитру
-    dark_palette = QPalette()
-    dark_palette.setColor(QPalette.Window, QColor(30, 30, 30))
-    dark_palette.setColor(QPalette.WindowText, Qt.white)
-    dark_palette.setColor(QPalette.Base, QColor(45, 45, 45))
-    dark_palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.ToolTipBase, Qt.white)
-    dark_palette.setColor(QPalette.ToolTipText, Qt.white)
-    dark_palette.setColor(QPalette.Text, Qt.white)
-    dark_palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    dark_palette.setColor(QPalette.ButtonText, Qt.white)
-    dark_palette.setColor(QPalette.BrightText, Qt.red)
-    dark_palette.setColor(QPalette.Link, QColor(42, 130, 218))
-    dark_palette.setColor(QPalette.Highlight, QColor(255, 107, 0))
-    dark_palette.setColor(QPalette.HighlightedText, Qt.black)
-    app.setPalette(dark_palette)
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(30, 30, 30))
+    palette.setColor(QPalette.WindowText, Qt.white)
+    palette.setColor(QPalette.Base, QColor(45, 45, 45))
+    palette.setColor(QPalette.Text, Qt.white)
+    palette.setColor(QPalette.Button, QColor(53, 53, 53))
+    palette.setColor(QPalette.ButtonText, Qt.white)
+    palette.setColor(QPalette.Highlight, QColor(255, 107, 0))
+    palette.setColor(QPalette.HighlightedText, Qt.black)
+    app.setPalette(palette)
 
     launcher = SmartTrainerLauncher()
     launcher.show()
