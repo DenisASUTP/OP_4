@@ -11,21 +11,19 @@ import threading
 import time
 from datetime import datetime
 
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QProgressBar, QMessageBox, QGroupBox, QTextEdit
-)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot, QPoint, QPointF
-from PyQt5.QtGui import QFont, QPalette, QColor, QPixmap, QPainter, QPen, QBrush, QPolygonF
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QApplication, QTextEdit, QProgressBar, \
+    QGroupBox, QHBoxLayout, QMessageBox
+from PySide6.QtCore import Qt, QTimer, Signal, Slot, QPointF
+from PySide6.QtGui import QPixmap, QFont, QPolygonF, QBrush, QPainter, QColor, QPen, QPalette
 
 
 class SmartTrainerLauncher(QWidget):
     """Основной класс лаунчера"""
-    log_signal = pyqtSignal(str)
-    progress_signal = pyqtSignal(int, str)
-    status_signal = pyqtSignal(str)
-    version_signal = pyqtSignal(str)
-    complete_signal = pyqtSignal(bool, str)
+    log_signal = Signal(str)
+    progress_signal = Signal(int, str)
+    status_signal = Signal(str)
+    version_signal = Signal(str)
+    complete_signal = Signal(bool, str)
 
     def __init__(self):
         super().__init__()
@@ -437,7 +435,7 @@ class SmartTrainerLauncher(QWidget):
         except:
             return False
 
-    @pyqtSlot(bool, str)
+    @Slot(bool, str)
     def on_operation_complete(self, success, message):
         """Обработчик завершения операции"""
         self.is_updating = False
@@ -454,28 +452,28 @@ class SmartTrainerLauncher(QWidget):
         # Запускаем приложение через секунду
         QTimer.singleShot(1000, self.launch_application)
 
-    @pyqtSlot(str)
+    @Slot(str)
     def add_log(self, message):
         """Добавляет сообщение в лог"""
         timestamp = datetime.now().strftime('%H:%M:%S')
         self.log_text.append(f"[{timestamp}] {message}")
         # Автопрокрутка
-        cursor = self.log_text.textCursor()
-        cursor.movePosition(cursor.End)
-        self.log_text.setTextCursor(cursor)
+        # cursor = self.log_text.textCursor()
+        # cursor.movePosition(cursor.End)
+        # self.log_text.setTextCursor(cursor)
 
-    @pyqtSlot(int, str)
+    @Slot(int, str)
     def update_progress(self, value, text):
         """Обновляет прогресс"""
         self.progress_bar.setValue(value)
         self.status_label.setText(text)
 
-    @pyqtSlot(str)
+    @Slot(str)
     def update_status(self, text):
         """Обновляет статус"""
         self.status_label.setText(text)
 
-    @pyqtSlot(str)
+    @Slot(str)
     def update_version_display(self, text):
         """Обновляет отображение версии"""
         self.version_label.setText(text)
