@@ -524,7 +524,7 @@ class SmartTrainerApp(QWidget):
         rfid_icon.setPixmap(rfid_pixmap)
         rfid_icon.setAlignment(Qt.AlignCenter)
 
-        instruction = QLabel("Поднесите RFID карту или введите номер вручную 1")
+        instruction = QLabel("Поднесите RFID карту или введите номер вручную!")
         instruction.setFont(QFont("Arial", 16))
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setStyleSheet("color: white; margin: 20px;")
