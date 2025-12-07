@@ -1,20 +1,68 @@
 #!/usr/bin/env python3
 """
-Smart Trainer Launcher - Стабильная версия с GUI
+Smart Trainer Launcher - Универсальная версия для Windows и Orange Pi
 Автоматическая проверка обновлений и запуск приложения
 """
 import os
 import sys
+import platform
+
+# ==============================
+# УНИВЕРСАЛЬНАЯ НАСТРОЙКА QT
+# ==============================
+if sys.platform == "win32":
+    # Для WINDOWS
+    os.environ['QT_QPA_PLATFORM'] = 'windows'
+    print(f"Windows: Используем платформу 'windows'")
+
+    # Ищем плагины Qt
+    try:
+        # Пробуем импорт PySide6 для получения пути
+        from PySide6 import QtCore
+
+        qt_dir = os.path.dirname(QtCore.__file__)
+        plugin_path = os.path.join(qt_dir, "plugins", "platforms")
+
+        if os.path.exists(plugin_path):
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
+            print(f"Windows: Путь к плагинам: {plugin_path}")
+        else:
+            # Ищем в site-packages
+            import site
+
+            for site_dir in site.getsitepackages():
+                plugin_path = os.path.join(site_dir, "PySide6", "plugins", "platforms")
+                if os.path.exists(plugin_path):
+                    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
+                    print(f"Windows: Альтернативный путь: {plugin_path}")
+                    break
+    except ImportError:
+        print("Windows: PySide6 не найден, будет установлен позже")
+
+elif sys.platform == "linux":
+    # Для LINUX / ORANGE PI
+    os.environ['QT_QPA_PLATFORM'] = 'xcb'
+    print(f"Linux: Используем платформу 'xcb'")
+
+    # Для Orange Pi с GUI
+    if 'DISPLAY' not in os.environ:
+        os.environ['DISPLAY'] = ':0'
+else:
+    # Для других систем (macOS и т.д.)
+    os.environ['QT_QPA_PLATFORM'] = 'cocoa' if sys.platform == 'darwin' else 'xcb'
+
+# Остальные импорты ПОСЛЕ настройки переменных окружения
 import subprocess
 import requests
 import threading
 import time
 from datetime import datetime
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QApplication, QTextEdit, QProgressBar, \
-    QGroupBox, QHBoxLayout, QMessageBox
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel,
+                               QApplication, QProgressBar, QGroupBox, QTextEdit,
+                               QHBoxLayout, QMessageBox)
 from PySide6.QtCore import Qt, QTimer, Signal, Slot, QPointF
-from PySide6.QtGui import QPixmap, QFont, QPolygonF, QBrush, QPainter, QColor, QPen, QPalette
+from PySide6.QtGui import QPixmap, QFont, QPainter, QBrush, QColor, QPen, QPolygonF
 
 
 class SmartTrainerLauncher(QWidget):
@@ -225,14 +273,14 @@ class SmartTrainerLauncher(QWidget):
     def create_icon(self):
         """Создает иконку"""
         pixmap = QPixmap(150, 150)
-        pixmap.fill(Qt.transparent)
+        pixmap.fill(Qt.GlobalColor.transparent)
 
         painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Оранжевый круг
         painter.setBrush(QBrush(QColor(255, 107, 0)))
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(15, 15, 120, 120)
 
         # Белая стрелка
@@ -247,8 +295,8 @@ class SmartTrainerLauncher(QWidget):
         ]
 
         polygon = QPolygonF(points)
-        painter.setBrush(QBrush(Qt.white))
-        painter.setPen(QPen(Qt.white, 2))
+        painter.setBrush(QBrush(Qt.GlobalColor.white))
+        painter.setPen(QPen(Qt.GlobalColor.white, 2))
         painter.drawPolygon(polygon)
 
         painter.end()
@@ -294,7 +342,6 @@ class SmartTrainerLauncher(QWidget):
             self.timer.stop()
             if self.auto_launch and not self.is_updating:
                 QTimer.singleShot(1000, self.launch_application)
-                # self.start_automatic_check()
 
     def on_check_now(self):
         """Обработчик кнопки 'Проверить сейчас'"""
@@ -428,7 +475,10 @@ class SmartTrainerLauncher(QWidget):
     def install_requirements(self):
         """Устанавливает зависимости"""
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+            # Для Windows используем pip, для Linux - pip3
+            pip_cmd = "pip" if sys.platform == "win32" else "pip3"
+
+            subprocess.check_call([sys.executable, "-m", pip_cmd, "install", "-r", "requirements.txt"],
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL)
             return True
@@ -458,9 +508,9 @@ class SmartTrainerLauncher(QWidget):
         timestamp = datetime.now().strftime('%H:%M:%S')
         self.log_text.append(f"[{timestamp}] {message}")
         # Автопрокрутка
-        # cursor = self.log_text.textCursor()
-        # cursor.movePosition(cursor.End)
-        # self.log_text.setTextCursor(cursor)
+        cursor = self.log_text.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.log_text.setTextCursor(cursor)
 
     @Slot(int, str)
     def update_progress(self, value, text):
@@ -505,16 +555,24 @@ class SmartTrainerLauncher(QWidget):
 def check_requirements():
     """Проверяет наличие необходимых модулей"""
     try:
-        import PyQt5
+        import PySide6
         import requests
+        print(f"✓ PySide6 установлен: {PySide6.__version__}")
+        print(f"✓ requests установлен")
         return True
     except ImportError as e:
         print(f"❌ Отсутствует модуль: {e}")
         print("📦 Пробую установить необходимые модули...")
 
         try:
+            # Для Windows и Linux разные команды
+            if sys.platform == "win32":
+                pip_cmd = "pip"
+            else:
+                pip_cmd = "pip3"
+
             # Пробуем установить requests
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"],
+            subprocess.check_call([sys.executable, "-m", pip_cmd, "install", "requests"],
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL)
             print("✅ Модуль requests установлен")
@@ -525,13 +583,20 @@ def check_requirements():
             return False
         except:
             print("❌ Не удалось установить модули")
-            print("   Установите вручную: pip install PyQt5 requests")
+            print("   Установите вручную:")
+            if sys.platform == "win32":
+                print("   pip install PySide6 requests")
+            else:
+                print("   pip3 install PySide6 requests")
             input("Нажмите Enter для выхода...")
             return False
 
 
 def main():
     """Основная функция"""
+    print(f"Платформа: {sys.platform}")
+    print(f"Python: {sys.version}")
+
     # Проверяем наличие модулей
     if not check_requirements():
         return
@@ -539,21 +604,10 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
 
-    # Устанавливаем темную палитру
-    palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(30, 30, 30))
-    palette.setColor(QPalette.WindowText, Qt.white)
-    palette.setColor(QPalette.Base, QColor(45, 45, 45))
-    palette.setColor(QPalette.Text, Qt.white)
-    palette.setColor(QPalette.Button, QColor(53, 53, 53))
-    palette.setColor(QPalette.ButtonText, Qt.white)
-    palette.setColor(QPalette.Highlight, QColor(255, 107, 0))
-    palette.setColor(QPalette.HighlightedText, Qt.black)
-    app.setPalette(palette)
-
     launcher = SmartTrainerLauncher()
     launcher.show()
 
+    # Универсальный вызов
     sys.exit(app.exec())
 
 

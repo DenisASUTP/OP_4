@@ -3,12 +3,44 @@ import sys
 import os
 import sqlite3
 from datetime import datetime
+
+# ==============================
+# УНИВЕРСАЛЬНАЯ НАСТРОЙКА QT
+# ==============================
+if sys.platform == "win32":
+    # Для WINDOWS
+    os.environ['QT_QPA_PLATFORM'] = 'windows'
+    print(f"Windows: Используем платформу 'windows'")
+
+    # Ищем плагины Qt
+    try:
+        from PySide6 import QtCore
+
+        qt_dir = os.path.dirname(QtCore.__file__)
+        plugin_path = os.path.join(qt_dir, "plugins", "platforms")
+
+        if os.path.exists(plugin_path):
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
+            print(f"Windows: Путь к плагинам: {plugin_path}")
+    except ImportError:
+        pass
+
+elif sys.platform == "linux":
+    # Для LINUX / ORANGE PI
+    os.environ['QT_QPA_PLATFORM'] = 'xcb'
+    print(f"Linux: Используем платформу 'xcb'")
+
+    # Для Orange Pi с GUI
+    if 'DISPLAY' not in os.environ:
+        os.environ['DISPLAY'] = ':0'
+
+# Импорты PySide6 ПОСЛЕ настройки переменных
 from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QVBoxLayout,
-                             QHBoxLayout, QLabel, QStackedWidget, QListWidget,
-                             QListWidgetItem, QProgressBar, QMessageBox, QScrollArea,
-                             QGridLayout, QFrame, QDialog, QLineEdit, QFormLayout)
+                               QHBoxLayout, QLabel, QStackedWidget, QListWidget,
+                               QListWidgetItem, QProgressBar, QMessageBox, QScrollArea,
+                               QGridLayout, QFrame, QDialog, QLineEdit, QFormLayout)
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPixmap, QPainter, QColor, QIntValidator
+from PySide6.QtGui import QFont, QPixmap, QPainter, QColor, QIntValidator, QBrush, QPen
 
 
 # Заглушка для Modbus RTU
@@ -313,7 +345,7 @@ class ExerciseWidget(QFrame):
                 background-color: #3D3D3D;
             }
         """)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout()
         layout.setSpacing(8)
@@ -361,10 +393,11 @@ class ExerciseWidget(QFrame):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                scaled_pixmap = pixmap.scaled(240, 150, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                scaled_pixmap = pixmap.scaled(240, 150, Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
 
                 centered_pixmap = QPixmap(240, 150)
-                centered_pixmap.fill(Qt.transparent)
+                centered_pixmap.fill(Qt.GlobalColor.transparent)
 
                 x_offset = (240 - scaled_pixmap.width()) // 2
                 y_offset = (150 - scaled_pixmap.height()) // 2
@@ -382,7 +415,7 @@ class ExerciseWidget(QFrame):
             self.image_label.setAlignment(Qt.AlignCenter)
 
     def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             if self.parent:
                 self.parent.start_exercise(self.exercise)
         super().mousePressEvent(event)
@@ -513,7 +546,7 @@ class SmartTrainerApp(QWidget):
 
         rfid_icon = QLabel()
         rfid_pixmap = QPixmap(200, 200)
-        rfid_pixmap.fill(Qt.transparent)
+        rfid_pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(rfid_pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setBrush(QColor(255, 107, 0))
@@ -524,7 +557,7 @@ class SmartTrainerApp(QWidget):
         rfid_icon.setPixmap(rfid_pixmap)
         rfid_icon.setAlignment(Qt.AlignCenter)
 
-        instruction = QLabel("Поднесите RFID карту или введите номер вручную???")
+        instruction = QLabel("Поднесите RFID карту или введите номер вручную!!!")
         instruction.setFont(QFont("Arial", 16))
         instruction.setAlignment(Qt.AlignCenter)
         instruction.setStyleSheet("color: white; margin: 20px;")
@@ -592,22 +625,22 @@ class SmartTrainerApp(QWidget):
     def keyPressEvent(self, event):
         key = event.key()
 
-        if Qt.Key_0 <= key <= Qt.Key_9:
-            digit = str(key - Qt.Key_0)
+        if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+            digit = str(key - Qt.Key.Key_0)
             current_text = self.rfid_hidden_input.text()
             if len(current_text) < 10:
                 self.rfid_hidden_input.setText(current_text + digit)
 
-        elif key == Qt.Key_Backspace:
+        elif key == Qt.Key.Key_Backspace:
             current_text = self.rfid_hidden_input.text()
             if current_text:
                 self.rfid_hidden_input.setText(current_text[:-1])
 
-        elif key == Qt.Key_Return or key == Qt.Key_Enter:
+        elif key == Qt.Key.Key_Return or key == Qt.Key.Key_Enter:
             if len(self.current_rfid_input) == 10:
                 self.process_rfid(self.current_rfid_input)
 
-        elif key == Qt.Key_Escape:
+        elif key == Qt.Key.Key_Escape:
             self.rfid_hidden_input.clear()
             self.auth_status.setText("Ожидание карты...")
 
@@ -637,7 +670,7 @@ class SmartTrainerApp(QWidget):
 
     def register_new_user(self, rfid):
         dialog = RegistrationDialog(rfid, self)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             user_data = dialog.get_user_data()
             if self.db.add_user(
                     user_data['rf_id'],
@@ -900,7 +933,8 @@ class SmartTrainerApp(QWidget):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                scaled_pixmap = pixmap.scaled(350, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                scaled_pixmap = pixmap.scaled(350, 250, Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
                 self.exercise_image.setPixmap(scaled_pixmap)
             else:
                 self.exercise_image.setText("Ошибка загрузки изображения")
