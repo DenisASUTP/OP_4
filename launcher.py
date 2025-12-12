@@ -366,34 +366,34 @@ class SmartTrainerLauncher(QWidget):
         self.btn_cancel.setEnabled(True)
 
         # Запускаем в отдельном потоке
-        thread = threading.Thread(target=self.check_and_update)
-        thread.daemon = True
-        thread.start()
+        self.check_and_update()
 
     def check_and_update(self):
-        """Проверяет и обновляет приложение"""
+        """Проверяет и обновляет приложение (БЕЗ МНОГОПОТОЧНОСТИ)"""
         try:
             self.status_signal.emit("Проверка обновлений...")
             self.progress_signal.emit(10, "Проверка GitHub")
             self.add_log("Проверка обновлений...")
 
-            # Проверяем версию на GitHub
-            github_version = self.get_github_version()
+            # Делаем небольшую паузу, чтобы GUI обновился
+            QApplication.processEvents()
+            time.sleep(0.5)
 
+            github_version = self.get_github_version()
             if github_version:
                 self.add_log(f"Локальная версия: {self.current_version}")
                 self.add_log(f"Версия на GitHub: {github_version}")
-
                 if github_version == self.current_version:
                     self.add_log("У вас актуальная версия")
                     self.complete_signal.emit(True, "Версия актуальна")
                     return
-
                 self.add_log(f"Доступно обновление: {self.current_version} → {github_version}")
+
+                # Обновляем последовательно, с паузами для GUI
                 self.status_signal.emit("Скачивание обновлений...")
                 self.progress_signal.emit(30, "Скачивание файлов")
+                QApplication.processEvents()
 
-                # Обновляем приложение
                 if self.update_application(github_version):
                     self.complete_signal.emit(True, "Обновление завершено")
                 else:
@@ -401,7 +401,6 @@ class SmartTrainerLauncher(QWidget):
             else:
                 self.add_log("Не удалось проверить обновления")
                 self.complete_signal.emit(True, "Проверка завершена")
-
         except Exception as e:
             self.add_log(f"Ошибка: {str(e)}")
             self.complete_signal.emit(False, f"Ошибка: {str(e)}")
@@ -426,7 +425,7 @@ class SmartTrainerLauncher(QWidget):
             # Скачиваем файлы
             for filename in files_to_update:
                 self.add_log(f"Скачиваю {filename}...")
-
+                QApplication.processEvents()
                 if not self.download_file(filename):
                     self.add_log(f"Ошибка скачивания {filename}")
                     return False
