@@ -134,7 +134,7 @@ class RegistrationDialog(QDialog):
         self.setFixedSize(400, 300)
         self.setStyleSheet("""
             QDialog {
-                background-color: #F8F9FA;
+                background-color: #F0F0F0;
                 color: #333333;
             }
             QLabel {
@@ -380,7 +380,7 @@ class WelcomeScreen(QWidget):
         layout.addWidget(btn_now)
 
         self.setLayout(layout)
-        self.setStyleSheet("background-color: #F8F9FA;")
+        self.setStyleSheet("background-color: #F0F0F0;")
 
     def go_to_exercises(self):
         if self.parent:
@@ -719,7 +719,7 @@ class SmartTrainerApp(QWidget):
         layout.addWidget(self.rfid_hidden_input)
 
         screen.setLayout(layout)
-        screen.setStyleSheet("background-color: #F8F9FA;")
+        screen.setStyleSheet("background-color: #F0F0F0;")
 
         QTimer.singleShot(100, lambda: self.rfid_hidden_input.setFocus())
 
@@ -910,7 +910,7 @@ class SmartTrainerApp(QWidget):
         main_layout.addWidget(btn_back)
 
         screen.setLayout(main_layout)
-        screen.setStyleSheet("background-color: #F8F9FA;")
+        screen.setStyleSheet("background-color: #F0F0F0;")
         return screen
 
     def create_workout_screen(self):
@@ -1074,7 +1074,7 @@ class SmartTrainerApp(QWidget):
         layout.addLayout(buttons_layout)
 
         screen.setLayout(layout)
-        screen.setStyleSheet("background-color: #F8F9FA;")
+        screen.setStyleSheet("background-color: #F0F0F0;")
         return screen
 
     def show_auth_screen(self):
