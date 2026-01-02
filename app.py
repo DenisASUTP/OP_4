@@ -134,33 +134,42 @@ class RegistrationDialog(QDialog):
         self.setFixedSize(400, 300)
         self.setStyleSheet("""
             QDialog {
-                background-color: #2D2D2D;
-                color: white;
+                background-color: #F8F9FA;
+                color: #333333;
             }
             QLabel {
-                color: #CCCCCC;
+                color: #666666;
+                font-weight: 500;
             }
             QLineEdit {
-                background-color: #3D3D3D;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 5px;
-                padding: 8px;
+                background-color: white;
+                color: #333333;
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 10px;
                 font-size: 14px;
+                selection-background-color: #21A038;
             }
             QLineEdit:focus {
-                border: 1px solid #FF6B00;
+                border: 2px solid #21A038;
+                background-color: white;
+            }
+            QLineEdit:hover {
+                border: 2px solid #B0B0B0;
             }
         """)
 
         layout = QVBoxLayout()
+        layout.setSpacing(15)
 
         title = QLabel(f"Регистрация карты: {rf_id}")
         title.setFont(QFont("Arial", 16, QFont.Bold))
-        title.setStyleSheet("color: #FF6B00;")
+        title.setStyleSheet("color: #21A038;")
         title.setAlignment(Qt.AlignCenter)
 
         form_layout = QFormLayout()
+        form_layout.setSpacing(10)
+        form_layout.setContentsMargins(20, 0, 20, 0)
 
         self.first_name_input = QLineEdit()
         self.first_name_input.setPlaceholderText("Введите имя")
@@ -182,23 +191,28 @@ class RegistrationDialog(QDialog):
         form_layout.addRow("Уровень подготовки (1-6):", self.fitness_input)
 
         buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(15)
 
         self.btn_register = QPushButton("Зарегистрировать")
         self.btn_register.setStyleSheet("""
             QPushButton {
-                background-color: #4CAF50;
+                background-color: #21A038;
                 color: white;
                 border: none;
-                padding: 10px;
-                border-radius: 5px;
+                padding: 12px 25px;
+                border-radius: 8px;
                 font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #1C8A30;
             }
             QPushButton:pressed {
-                background-color: #45a049;
+                background-color: #187C28;
             }
             QPushButton:disabled {
-                background-color: #555;
-                color: #888;
+                background-color: #E0E0E0;
+                color: #999999;
             }
         """)
         self.btn_register.clicked.connect(self.accept)
@@ -206,14 +220,20 @@ class RegistrationDialog(QDialog):
         self.btn_cancel = QPushButton("Отмена")
         self.btn_cancel.setStyleSheet("""
             QPushButton {
-                background-color: #555;
-                color: white;
-                border: none;
-                padding: 10px;
-                border-radius: 5px;
+                background-color: #F0F0F0;
+                color: #666666;
+                border: 2px solid #E0E0E0;
+                padding: 12px 25px;
+                border-radius: 8px;
+                font-weight: 500;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #E8E8E8;
+                border-color: #D0D0D0;
             }
             QPushButton:pressed {
-                background-color: #777;
+                background-color: #D8D8D8;
             }
         """)
         self.btn_cancel.clicked.connect(self.reject)
@@ -222,6 +242,7 @@ class RegistrationDialog(QDialog):
         buttons_layout.addWidget(self.btn_cancel)
 
         layout.addWidget(title)
+        layout.addSpacing(10)
         layout.addLayout(form_layout)
         layout.addStretch()
         layout.addLayout(buttons_layout)
@@ -265,59 +286,101 @@ class WelcomeScreen(QWidget):
 
     def initUI(self):
         layout = QVBoxLayout()
+        layout.setContentsMargins(30, 40, 30, 40)
+        layout.setSpacing(20)
+
+        # Логотип/иконка
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap(120, 120)
+        logo_pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(logo_pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor(33, 160, 56))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(10, 10, 100, 100)
+        painter.setBrush(QColor(255, 255, 255))
+        painter.drawEllipse(35, 35, 50, 50)
+        painter.end()
+        logo_label.setPixmap(logo_pixmap)
 
         # Приветствие
         welcome_text = QLabel(f"Здравствуйте, {self.user_data['first_name']} {self.user_data['last_name']}!")
-        welcome_text.setFont(QFont("Arial", 24, QFont.Bold))
-        welcome_text.setStyleSheet("color: #FF6B00;")
+        welcome_text.setFont(QFont("Arial", 22, QFont.Bold))
+        welcome_text.setStyleSheet("color: #333333;")
         welcome_text.setAlignment(Qt.AlignCenter)
 
         # Комплимент
-        compliment = QLabel("Вы как всегда отлично выглядите!")
-        compliment.setFont(QFont("Arial", 18))
-        compliment.setStyleSheet("color: #4CAF50;")
+        compliment = QLabel("Рады видеть вас снова!")
+        compliment.setFont(QFont("Arial", 16))
+        compliment.setStyleSheet("color: #21A038;")
         compliment.setAlignment(Qt.AlignCenter)
 
         # Информация о пользователе
-        info_text = QLabel(f"Рост: {self.user_data['height']} см | Уровень: {self.user_data['fitness_level']}")
-        info_text.setFont(QFont("Arial", 14))
-        info_text.setStyleSheet("color: #CCCCCC;")
-        info_text.setAlignment(Qt.AlignCenter)
+        info_frame = QFrame()
+        info_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 2px solid #E8E8E8;
+                border-radius: 12px;
+                padding: 15px;
+            }
+        """)
+        info_layout = QHBoxLayout(info_frame)
+        info_layout.setSpacing(30)
+
+        height_label = QLabel(f"Рост: {self.user_data['height']} см")
+        height_label.setFont(QFont("Arial", 14))
+        height_label.setStyleSheet("color: #666666;")
+
+        level_label = QLabel(f"Уровень: {self.user_data['fitness_level']}")
+        level_label.setFont(QFont("Arial", 14))
+        level_label.setStyleSheet("color: #666666;")
+
+        info_layout.addStretch()
+        info_layout.addWidget(height_label)
+        info_layout.addWidget(level_label)
+        info_layout.addStretch()
 
         # Инструкция
         instruction = QLabel("Переход к выбору упражнений через 3 секунды...")
         instruction.setFont(QFont("Arial", 12))
-        instruction.setStyleSheet("color: #888;")
+        instruction.setStyleSheet("color: #999999;")
         instruction.setAlignment(Qt.AlignCenter)
 
         # Кнопка перехода сейчас
         btn_now = QPushButton("Начать сейчас")
-        btn_now.setFont(QFont("Arial", 14))
+        btn_now.setFont(QFont("Arial", 14, QFont.Bold))
+        btn_now.setFixedHeight(50)
         btn_now.setStyleSheet("""
             QPushButton {
-                background-color: #4CAF50;
+                background-color: #21A038;
                 color: white;
                 border: none;
-                padding: 15px;
-                border-radius: 5px;
-                margin: 20px;
+                border-radius: 8px;
+                margin: 10px 40px;
+            }
+            QPushButton:hover {
+                background-color: #1C8A30;
             }
             QPushButton:pressed {
-                background-color: #45a049;
+                background-color: #187C28;
             }
         """)
         btn_now.clicked.connect(self.go_to_exercises)
 
         layout.addStretch()
+        layout.addWidget(logo_label)
         layout.addWidget(welcome_text)
         layout.addWidget(compliment)
-        layout.addWidget(info_text)
+        layout.addSpacing(10)
+        layout.addWidget(info_frame)
         layout.addStretch()
         layout.addWidget(instruction)
         layout.addWidget(btn_now)
 
         self.setLayout(layout)
-        self.setStyleSheet("background-color: #1E1E1E;")
+        self.setStyleSheet("background-color: #F8F9FA;")
 
     def go_to_exercises(self):
         if self.parent:
@@ -335,53 +398,72 @@ class ExerciseWidget(QFrame):
     def initUI(self):
         self.setStyleSheet("""
             ExerciseWidget {
-                background-color: #2D2D2D;
-                border: 2px solid #444;
-                border-radius: 15px;
-                margin: 5px;
+                background-color: white;
+                border: 2px solid #E8E8E8;
+                border-radius: 12px;
+                margin: 6px;
             }
             ExerciseWidget:hover {
-                border: 2px solid #FF6B00;
-                background-color: #3D3D3D;
+                border: 2px solid #21A038;
+                background-color: #F8FFF9;
             }
         """)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QVBoxLayout()
-        layout.setSpacing(8)
+        layout.setSpacing(10)
+        layout.setContentsMargins(12, 12, 12, 12)
 
         title = QLabel(self.exercise["name"])
-        title.setFont(QFont("Arial", 14, QFont.Bold))
-        title.setStyleSheet("color: #FF6B00; margin: 8px;")
+        title.setFont(QFont("Arial", 13, QFont.Bold))
+        title.setStyleSheet("color: #333333;")
         title.setAlignment(Qt.AlignCenter)
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setMinimumSize(250, 160)
-        self.image_label.setMaximumSize(250, 160)
+        self.image_label.setMinimumSize(230, 150)
+        self.image_label.setMaximumSize(230, 150)
         self.image_label.setStyleSheet("""
-            background-color: #1E1E1E;
-            border: 1px solid #555;
-            border-radius: 10px;
+            background-color: #F0F0F0;
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
         """)
 
         self.load_image()
 
         description = QLabel(self.exercise["description"])
-        description.setFont(QFont("Arial", 11))
-        description.setStyleSheet("color: #CCCCCC; margin: 8px;")
+        description.setFont(QFont("Arial", 10))
+        description.setStyleSheet("color: #666666;")
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignCenter)
 
-        intensity = QLabel(f"Интенсивность: {self.exercise['intensity']}%")
-        intensity.setFont(QFont("Arial", 11, QFont.Bold))
-        intensity.setStyleSheet("color: #4CAF50; margin: 5px;")
-        intensity.setAlignment(Qt.AlignCenter)
+        intensity_frame = QFrame()
+        intensity_frame.setStyleSheet("""
+            QFrame {
+                background-color: #F0F8F2;
+                border: 1px solid #D0E8D5;
+                border-radius: 6px;
+                padding: 5px;
+            }
+        """)
+        intensity_layout = QHBoxLayout(intensity_frame)
+        intensity_label = QLabel("Интенсивность:")
+        intensity_label.setFont(QFont("Arial", 10))
+        intensity_label.setStyleSheet("color: #666666;")
+
+        intensity_value = QLabel(f"{self.exercise['intensity']}%")
+        intensity_value.setFont(QFont("Arial", 10, QFont.Bold))
+        intensity_value.setStyleSheet("color: #21A038;")
+
+        intensity_layout.addStretch()
+        intensity_layout.addWidget(intensity_label)
+        intensity_layout.addWidget(intensity_value)
+        intensity_layout.addStretch()
 
         layout.addWidget(title)
         layout.addWidget(self.image_label)
         layout.addWidget(description)
-        layout.addWidget(intensity)
+        layout.addWidget(intensity_frame)
 
         self.setLayout(layout)
 
@@ -393,14 +475,14 @@ class ExerciseWidget(QFrame):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                scaled_pixmap = pixmap.scaled(240, 150, Qt.AspectRatioMode.KeepAspectRatio,
+                scaled_pixmap = pixmap.scaled(220, 140, Qt.AspectRatioMode.KeepAspectRatio,
                                               Qt.TransformationMode.SmoothTransformation)
 
-                centered_pixmap = QPixmap(240, 150)
-                centered_pixmap.fill(Qt.GlobalColor.transparent)
+                centered_pixmap = QPixmap(220, 140)
+                centered_pixmap.fill(QColor(240, 240, 240))
 
-                x_offset = (240 - scaled_pixmap.width()) // 2
-                y_offset = (150 - scaled_pixmap.height()) // 2
+                x_offset = (220 - scaled_pixmap.width()) // 2
+                y_offset = (140 - scaled_pixmap.height()) // 2
 
                 painter = QPainter(centered_pixmap)
                 painter.drawPixmap(x_offset, y_offset, scaled_pixmap)
@@ -410,9 +492,11 @@ class ExerciseWidget(QFrame):
             else:
                 self.image_label.setText("Ошибка\nзагрузки\nизображения")
                 self.image_label.setAlignment(Qt.AlignCenter)
+                self.image_label.setStyleSheet("color: #999999;")
         else:
             self.image_label.setText("Изображение\nне найдено")
             self.image_label.setAlignment(Qt.AlignCenter)
+            self.image_label.setStyleSheet("color: #999999;")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -530,6 +614,7 @@ class SmartTrainerApp(QWidget):
         self.stacked_widget.addWidget(self.workout_screen)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.stacked_widget)
         self.setLayout(layout)
 
@@ -538,30 +623,70 @@ class SmartTrainerApp(QWidget):
     def create_auth_screen(self):
         screen = QWidget()
         layout = QVBoxLayout()
+        layout.setContentsMargins(40, 60, 40, 40)
+        layout.setSpacing(30)
+
+        # Верхняя часть с логотипом
+        header_layout = QVBoxLayout()
+        header_layout.setSpacing(20)
+
+        # Логотип
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_pixmap = QPixmap(100, 100)
+        logo_pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(logo_pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor(33, 160, 56))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(0, 0, 100, 100)
+        painter.setBrush(QColor(255, 255, 255))
+        painter.drawEllipse(25, 25, 50, 50)
+        painter.end()
+        logo_label.setPixmap(logo_pixmap)
 
         title = QLabel("SMART TRAINER")
-        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setFont(QFont("Arial", 26, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #FF6B00; margin: 40px;")
+        title.setStyleSheet("color: #333333;")
 
+        header_layout.addWidget(logo_label)
+        header_layout.addWidget(title)
+
+        # Инструкция
+        instruction = QLabel("Поднесите RFID карту\nили введите номер вручную")
+        instruction.setFont(QFont("Arial", 16))
+        instruction.setAlignment(Qt.AlignCenter)
+        instruction.setStyleSheet("color: #666666;")
+        instruction.setWordWrap(True)
+
+        # Индикатор ввода
+        self.input_indicator = QLabel("▢▢▢▢▢▢▢▢▢▢")
+        self.input_indicator.setFont(QFont("Arial", 28, QFont.Bold))
+        self.input_indicator.setAlignment(Qt.AlignCenter)
+        self.input_indicator.setStyleSheet("color: #21A038; margin: 20px 0;")
+
+        # Иконка RFID
         rfid_icon = QLabel()
-        rfid_pixmap = QPixmap(200, 200)
+        rfid_pixmap = QPixmap(180, 120)
         rfid_pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(rfid_pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(QColor(255, 107, 0))
-        painter.drawRect(50, 50, 100, 150)
+        painter.setBrush(QColor(33, 160, 56))
+        painter.drawRoundedRect(40, 20, 100, 80, 10, 10)
         painter.setBrush(QColor(200, 200, 200))
-        painter.drawRect(70, 180, 60, 20)
+        painter.drawRoundedRect(60, 85, 60, 15, 7, 7)
         painter.end()
         rfid_icon.setPixmap(rfid_pixmap)
         rfid_icon.setAlignment(Qt.AlignCenter)
 
-        instruction = QLabel("Поднесите RFID карту или введите номер вручную!!!")
-        instruction.setFont(QFont("Arial", 16))
-        instruction.setAlignment(Qt.AlignCenter)
-        instruction.setStyleSheet("color: white; margin: 20px;")
+        # Статус авторизации
+        self.auth_status = QLabel("Ожидание карты...")
+        self.auth_status.setFont(QFont("Arial", 14))
+        self.auth_status.setAlignment(Qt.AlignCenter)
+        self.auth_status.setStyleSheet("color: #666666; padding: 10px;")
 
+        # Скрытый ввод
         self.rfid_hidden_input = QLineEdit()
         self.rfid_hidden_input.setStyleSheet("""
             QLineEdit {
@@ -576,34 +701,25 @@ class SmartTrainerApp(QWidget):
         self.rfid_hidden_input.textChanged.connect(self.on_rfid_input_changed)
         self.rfid_hidden_input.setFocus()
 
+        # Отладочная информация
         self.input_display = QLabel("Ввод: ")
         self.input_display.setFont(QFont("Arial", 10))
-        self.input_display.setStyleSheet("color: #888888;")
+        self.input_display.setStyleSheet("color: #999999;")
         self.input_display.setAlignment(Qt.AlignRight)
         self.input_display.setContentsMargins(0, 0, 20, 0)
 
-        self.auth_status = QLabel("Ожидание карты...")
-        self.auth_status.setFont(QFont("Arial", 14))
-        self.auth_status.setAlignment(Qt.AlignCenter)
-        self.auth_status.setStyleSheet("color: #CCCCCC; margin: 20px;")
-
-        self.input_indicator = QLabel("▢▢▢▢▢▢▢▢▢▢")
-        self.input_indicator.setFont(QFont("Arial", 24, QFont.Bold))
-        self.input_indicator.setAlignment(Qt.AlignCenter)
-        self.input_indicator.setStyleSheet("color: #FF6B00; margin: 10px;")
-
-        layout.addWidget(title)
+        layout.addLayout(header_layout)
         layout.addStretch()
-        layout.addWidget(rfid_icon)
         layout.addWidget(instruction)
         layout.addWidget(self.input_indicator)
+        layout.addWidget(rfid_icon)
         layout.addWidget(self.auth_status)
         layout.addStretch()
         layout.addWidget(self.input_display)
         layout.addWidget(self.rfid_hidden_input)
 
         screen.setLayout(layout)
-        screen.setStyleSheet("background-color: #1E1E1E;")
+        screen.setStyleSheet("background-color: #F8F9FA;")
 
         QTimer.singleShot(100, lambda: self.rfid_hidden_input.setFocus())
 
@@ -706,169 +822,244 @@ class SmartTrainerApp(QWidget):
     def create_exercise_screen(self):
         screen = QWidget()
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+
+        # Шапка с информацией о пользователе
+        header_frame = QFrame()
+        header_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 2px solid #E8E8E8;
+                border-radius: 12px;
+                padding: 15px;
+            }
+        """)
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setSpacing(8)
 
         self.user_info = QLabel("Пользователь: ")
-        self.user_info.setFont(QFont("Arial", 16, QFont.Bold))
-        self.user_info.setAlignment(Qt.AlignCenter)
-        self.user_info.setStyleSheet("color: #FF6B00; margin: 10px;")
+        self.user_info.setFont(QFont("Arial", 15, QFont.Bold))
+        self.user_info.setStyleSheet("color: #333333;")
 
         instruction = QLabel("Выберите упражнение (нажмите на картинку):")
-        instruction.setFont(QFont("Arial", 14))
-        instruction.setAlignment(Qt.AlignCenter)
-        instruction.setStyleSheet("color: #CCCCCC; margin: 10px;")
+        instruction.setFont(QFont("Arial", 13))
+        instruction.setStyleSheet("color: #666666;")
 
+        header_layout.addWidget(self.user_info)
+        header_layout.addWidget(instruction)
+
+        # Область со списком упражнений
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet("""
             QScrollArea {
                 border: none;
-                background-color: #1E1E1E;
+                background-color: transparent;
             }
             QScrollBar:vertical {
-                background-color: #2D2D2D;
-                width: 15px;
+                background-color: #F0F0F0;
+                width: 12px;
+                border-radius: 6px;
                 margin: 0px;
             }
             QScrollBar::handle:vertical {
-                background-color: #FF6B00;
-                border-radius: 7px;
+                background-color: #21A038;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #1C8A30;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
 
         exercises_widget = QWidget()
         self.exercises_layout = QGridLayout()
-        self.exercises_layout.setSpacing(8)
-        self.exercises_layout.setContentsMargins(15, 15, 15, 15)
+        self.exercises_layout.setSpacing(10)
+        self.exercises_layout.setContentsMargins(5, 5, 5, 5)
 
         exercises_widget.setLayout(self.exercises_layout)
         scroll_area.setWidget(exercises_widget)
 
+        # Кнопка выхода
         btn_back = QPushButton("Выйти")
-        btn_back.setFont(QFont("Arial", 14))
+        btn_back.setFont(QFont("Arial", 14, QFont.Bold))
+        btn_back.setFixedHeight(50)
         btn_back.setStyleSheet("""
             QPushButton {
-                background-color: #555;
-                color: white;
-                border: none;
-                padding: 15px;
-                border-radius: 5px;
-                margin: 10px;
+                background-color: #F0F0F0;
+                color: #666666;
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #E8E8E8;
+                border-color: #D0D0D0;
             }
             QPushButton:pressed {
-                background-color: #777;
+                background-color: #D8D8D8;
             }
         """)
         btn_back.clicked.connect(self.show_auth_screen)
 
-        main_layout.addWidget(self.user_info)
-        main_layout.addWidget(instruction)
+        main_layout.addWidget(header_frame)
         main_layout.addWidget(scroll_area, 1)
         main_layout.addWidget(btn_back)
 
         screen.setLayout(main_layout)
-        screen.setStyleSheet("background-color: #1E1E1E; color: white;")
+        screen.setStyleSheet("background-color: #F8F9FA;")
         return screen
 
     def create_workout_screen(self):
         screen = QWidget()
         layout = QVBoxLayout()
+        layout.setContentsMargins(25, 30, 25, 25)
+        layout.setSpacing(20)
 
+        # Заголовок упражнения
         self.exercise_title = QLabel("Упражнение")
-        self.exercise_title.setFont(QFont("Arial", 20, QFont.Bold))
+        self.exercise_title.setFont(QFont("Arial", 22, QFont.Bold))
         self.exercise_title.setAlignment(Qt.AlignCenter)
-        self.exercise_title.setStyleSheet("color: #FF6B00; margin: 10px;")
+        self.exercise_title.setStyleSheet("color: #333333;")
 
+        # Изображение упражнения
         self.exercise_image = QLabel()
         self.exercise_image.setAlignment(Qt.AlignCenter)
-        self.exercise_image.setMinimumSize(400, 300)
+        self.exercise_image.setMinimumSize(400, 280)
+        self.exercise_image.setMaximumSize(400, 280)
         self.exercise_image.setStyleSheet("""
-            border: 2px solid #444; 
-            border-radius: 10px;
-            background-color: #2D2D2D;
-            color: white;
+            border: 2px solid #E8E8E8; 
+            border-radius: 12px;
+            background-color: white;
+            color: #999999;
             font-size: 14px;
         """)
 
-        metrics_layout = QVBoxLayout()
+        # Панель метрик
+        metrics_frame = QFrame()
+        metrics_frame.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 2px solid #E8E8E8;
+                border-radius: 12px;
+                padding: 20px;
+            }
+        """)
+        metrics_layout = QVBoxLayout(metrics_frame)
+        metrics_layout.setSpacing(15)
 
-        force_layout = QHBoxLayout()
+        # Сила
+        force_widget = QWidget()
+        force_layout = QVBoxLayout(force_widget)
+        force_layout.setSpacing(8)
+
+        force_header = QHBoxLayout()
         force_label = QLabel("Сила:")
         force_label.setFont(QFont("Arial", 14))
+        force_label.setStyleSheet("color: #666666;")
+
         self.force_value = QLabel("0 Н")
         self.force_value.setFont(QFont("Arial", 14, QFont.Bold))
-        self.force_value.setStyleSheet("color: #FF6B00;")
-        force_layout.addWidget(force_label)
-        force_layout.addStretch()
-        force_layout.addWidget(self.force_value)
+        self.force_value.setStyleSheet("color: #21A038;")
+
+        force_header.addWidget(force_label)
+        force_header.addStretch()
+        force_header.addWidget(self.force_value)
 
         self.force_progress = QProgressBar()
         self.force_progress.setStyleSheet("""
             QProgressBar {
-                border: 2px solid #444;
-                border-radius: 5px;
+                border: 2px solid #E0E0E0;
+                border-radius: 6px;
                 text-align: center;
-                color: white;
+                color: #333333;
+                height: 20px;
             }
             QProgressBar::chunk {
-                background-color: #FF6B00;
+                background-color: #21A038;
+                border-radius: 4px;
             }
         """)
 
-        reps_layout = QHBoxLayout()
+        force_layout.addLayout(force_header)
+        force_layout.addWidget(self.force_progress)
+
+        # Повторения
+        reps_widget = QWidget()
+        reps_layout = QHBoxLayout(reps_widget)
         reps_label = QLabel("Повторения:")
         reps_label.setFont(QFont("Arial", 14))
+        reps_label.setStyleSheet("color: #666666;")
+
         self.reps_value = QLabel("0")
         self.reps_value.setFont(QFont("Arial", 14, QFont.Bold))
-        self.reps_value.setStyleSheet("color: #FF6B00;")
+        self.reps_value.setStyleSheet("color: #21A038;")
+
         reps_layout.addWidget(reps_label)
         reps_layout.addStretch()
         reps_layout.addWidget(self.reps_value)
 
-        intensity_layout = QHBoxLayout()
+        # Интенсивность
+        intensity_widget = QWidget()
+        intensity_layout = QHBoxLayout(intensity_widget)
         intensity_label = QLabel("Интенсивность:")
         intensity_label.setFont(QFont("Arial", 14))
+        intensity_label.setStyleSheet("color: #666666;")
+
         self.intensity_value = QLabel("0%")
         self.intensity_value.setFont(QFont("Arial", 14, QFont.Bold))
-        self.intensity_value.setStyleSheet("color: #FF6B00;")
+        self.intensity_value.setStyleSheet("color: #21A038;")
+
         intensity_layout.addWidget(intensity_label)
         intensity_layout.addStretch()
         intensity_layout.addWidget(self.intensity_value)
 
-        metrics_layout.addLayout(force_layout)
-        metrics_layout.addWidget(self.force_progress)
-        metrics_layout.addLayout(reps_layout)
-        metrics_layout.addLayout(intensity_layout)
+        metrics_layout.addWidget(force_widget)
+        metrics_layout.addWidget(reps_widget)
+        metrics_layout.addWidget(intensity_widget)
 
+        # Кнопки управления
         buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(15)
 
         btn_stop = QPushButton("Стоп")
-        btn_stop.setFont(QFont("Arial", 14))
+        btn_stop.setFont(QFont("Arial", 14, QFont.Bold))
+        btn_stop.setFixedHeight(50)
         btn_stop.setStyleSheet("""
             QPushButton {
-                background-color: #D32F2F;
+                background-color: #21A038;
                 color: white;
                 border: none;
-                padding: 15px;
-                border-radius: 5px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #1C8A30;
             }
             QPushButton:pressed {
-                background-color: #F44336;
+                background-color: #187C28;
             }
         """)
         btn_stop.clicked.connect(self.stop_workout)
 
         btn_back = QPushButton("Назад")
-        btn_back.setFont(QFont("Arial", 14))
+        btn_back.setFont(QFont("Arial", 14, QFont.Bold))
+        btn_back.setFixedHeight(50)
         btn_back.setStyleSheet("""
             QPushButton {
-                background-color: #555;
-                color: white;
-                border: none;
-                padding: 15px;
-                border-radius: 5px;
+                background-color: #F0F0F0;
+                color: #666666;
+                border: 2px solid #E0E0E0;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #E8E8E8;
+                border-color: #D0D0D0;
             }
             QPushButton:pressed {
-                background-color: #777;
+                background-color: #D8D8D8;
             }
         """)
         btn_back.clicked.connect(self.show_exercise_screen)
@@ -877,13 +1068,13 @@ class SmartTrainerApp(QWidget):
         buttons_layout.addWidget(btn_back)
 
         layout.addWidget(self.exercise_title)
-        layout.addWidget(self.exercise_image)
-        layout.addLayout(metrics_layout)
+        layout.addWidget(self.exercise_image, 0, Qt.AlignCenter)
+        layout.addWidget(metrics_frame)
         layout.addStretch()
         layout.addLayout(buttons_layout)
 
         screen.setLayout(layout)
-        screen.setStyleSheet("background-color: #1E1E1E; color: white;")
+        screen.setStyleSheet("background-color: #F8F9FA;")
         return screen
 
     def show_auth_screen(self):
@@ -933,7 +1124,7 @@ class SmartTrainerApp(QWidget):
         if os.path.exists(image_path):
             pixmap = QPixmap(image_path)
             if not pixmap.isNull():
-                scaled_pixmap = pixmap.scaled(350, 250, Qt.AspectRatioMode.KeepAspectRatio,
+                scaled_pixmap = pixmap.scaled(380, 260, Qt.AspectRatioMode.KeepAspectRatio,
                                               Qt.TransformationMode.SmoothTransformation)
                 self.exercise_image.setPixmap(scaled_pixmap)
             else:
