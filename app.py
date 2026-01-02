@@ -134,7 +134,7 @@ class RegistrationDialog(QDialog):
         self.setFixedSize(400, 300)
         self.setStyleSheet("""
             QDialog {
-                background-color: #F0F0F0;
+                background-color: #C0C0C0;
                 color: #333333;
             }
             QLabel {
@@ -380,7 +380,7 @@ class WelcomeScreen(QWidget):
         layout.addWidget(btn_now)
 
         self.setLayout(layout)
-        self.setStyleSheet("background-color: #F0F0F0;")
+        self.setStyleSheet("background-color: #C0C0C0;")
 
     def go_to_exercises(self):
         if self.parent:
@@ -424,7 +424,7 @@ class ExerciseWidget(QFrame):
         self.image_label.setMinimumSize(230, 150)
         self.image_label.setMaximumSize(230, 150)
         self.image_label.setStyleSheet("""
-            background-color: #F0F0F0;
+            background-color: #C0C0C0;
             border: 1px solid #E0E0E0;
             border-radius: 8px;
         """)
@@ -719,7 +719,7 @@ class SmartTrainerApp(QWidget):
         layout.addWidget(self.rfid_hidden_input)
 
         screen.setLayout(layout)
-        screen.setStyleSheet("background-color: #F0F0F0;")
+        screen.setStyleSheet("background-color: #C0C0C0;")
 
         QTimer.singleShot(100, lambda: self.rfid_hidden_input.setFocus())
 
@@ -858,7 +858,7 @@ class SmartTrainerApp(QWidget):
                 background-color: transparent;
             }
             QScrollBar:vertical {
-                background-color: #F0F0F0;
+                background-color: #C0C0C0;
                 width: 12px;
                 border-radius: 6px;
                 margin: 0px;
@@ -910,7 +910,7 @@ class SmartTrainerApp(QWidget):
         main_layout.addWidget(btn_back)
 
         screen.setLayout(main_layout)
-        screen.setStyleSheet("background-color: #F0F0F0;")
+        screen.setStyleSheet("background-color: #C0C0C0;")
         return screen
 
     def create_workout_screen(self):
@@ -1074,7 +1074,7 @@ class SmartTrainerApp(QWidget):
         layout.addLayout(buttons_layout)
 
         screen.setLayout(layout)
-        screen.setStyleSheet("background-color: #F0F0F0;")
+        screen.setStyleSheet("background-color: #C0C0C0;")
         return screen
 
     def show_auth_screen(self):
